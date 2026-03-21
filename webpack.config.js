@@ -27,11 +27,34 @@ module.exports = {
     extensions: [".ts", ".js"],
   },
   plugins: [
-    // Copy icons so they are available under dist/icons/ as well,
-    // in case any bundled asset reference resolves relative to dist.
     new CopyPlugin({
       patterns: [
+        // Icons into dist/icons/ (already present, keep for asset resolution)
         { from: "icons", to: path.resolve(__dirname, "dist/icons") },
+        // Copy manifest.json into dist/, rewriting "dist/foo.js" → "foo.js"
+        {
+          from: "manifest.json",
+          to: path.resolve(__dirname, "dist/manifest.json"),
+          transform(content) {
+            return content.toString().replace(/"dist\//g, '"');
+          },
+        },
+        // Copy popup.html into dist/, rewriting src="dist/popup.js" → src="popup.js"
+        {
+          from: "popup.html",
+          to: path.resolve(__dirname, "dist/popup.html"),
+          transform(content) {
+            return content.toString().replace(/src="dist\//g, 'src="');
+          },
+        },
+        // Copy options.html into dist/, rewriting src="dist/options.js" → src="options.js"
+        {
+          from: "options.html",
+          to: path.resolve(__dirname, "dist/options.html"),
+          transform(content) {
+            return content.toString().replace(/src="dist\//g, 'src="');
+          },
+        },
       ],
     }),
   ],

@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Celticly – Irish Translation",
+  "short_name": "Celticly",
+  "description": "Select any text on a webpage for an instant Irish translation. Build your personal word bank with Celticly.",
+  "version": "1.0.0",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "Celticly"
+  },
+  "options_page": "options.html",
+  "permissions": [
+    "storage",
+    "contextMenus"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*", "media/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
