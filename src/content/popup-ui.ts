@@ -226,7 +226,7 @@ const POPUP_STYLES = `
   .cf-chip:active { transform: scale(0.95); }
 
   /* â”€â”€ Example sentence â”€â”€ */
-  .cf-insights {
+  .cf-example {
     margin-top: 10px;
     padding: 8px 10px;
     background: var(--example-bg);
@@ -240,12 +240,15 @@ const POPUP_STYLES = `
     display: flex;
     align-items: center;
     gap: 6px;
-    margin-bottom: 6px;
+    margin-top: 4px;
+    margin-bottom: 2px;
     flex-wrap: wrap;
   }
 
   .cf-pron {
     font-style: italic;
+    font-size: 13px;
+    font-weight: 500;
     color: var(--text-muted);
   }
 
@@ -258,6 +261,13 @@ const POPUP_STYLES = `
     padding: 1px 8px;
     font-size: 11px;
     font-weight: 600;
+  }
+
+  .cf-same-word {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
   }
 
   .cf-example-label {
@@ -279,8 +289,7 @@ const POPUP_STYLES = `
     font-weight: 500;
   }
 
-  /* â”€â”€ Loading â”€â”€ */
-  .cf-loading {
+    .cf-loading {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -434,6 +443,8 @@ export class TranslationPopup {
   showResult(result: TranslationResult, truncated: boolean, callbacks: PopupCallbacks): void {
     this.ensure();
     this.renderResult(result, truncated, callbacks);
+    // Re-position using actual rendered dimensions so the popup is never clipped
+    requestAnimationFrame(() => this.position(this.lastX, this.lastY));
     this.scheduleAutoDismiss(callbacks.onClose);
   }
 
@@ -444,20 +455,9 @@ export class TranslationPopup {
   }
 
   /** Called asynchronously after showResult to inject word insights. */
-  updateInsights(data: { sentence: string; irish: string; pronunciation?: string; wordType?: string }): void {
-    if (!this.popupEl) return;
-    const slot = this.popupEl.querySelector(".cf-insights-slot");
-    if (!slot) return;
-    slot.outerHTML = this.buildInsightsHtml(data.pronunciation ?? "", data.wordType ?? "", data.sentence, data.irish);
-  }
-
-  private buildInsightsHtml(pronunciation: string, wordType: string, exEn: string, exIrish: string): string {
-    const pronHtml = pronunciation ? `<span class="cf-pron">/${escapeHtml(pronunciation)}/</span>` : "";
-    const sepHtml = pronunciation && wordType ? `<span class="cf-meta-sep">&#183;</span>` : "";
-    const typeHtml = wordType ? `<span class="cf-word-type-badge">${escapeHtml(wordType)}</span>` : "";
-    const metaHtml = (pronunciation || wordType) ? `<div class="cf-meta">${pronHtml}${sepHtml}${typeHtml}</div>` : "";
-    return `<div class="cf-insights">${metaHtml}<div class="cf-example-label">&#x1F4A1; Try using it</div><div class="cf-example-en">${escapeHtml(exEn)}</div><div class="cf-example-ga">${escapeHtml(exIrish)}</div></div>`;
-  }
+  // NOTE: insights are now returned synchronously in the translate response;
+  //       this method is retained only as a no-op safety net.
+  updateInsights(_data: { sentence: string; irish: string; pronunciation?: string; wordType?: string }): void {}
 
   dismiss(): void {
     this.clearAutoDismiss();
@@ -515,8 +515,9 @@ export class TranslationPopup {
     if (!this.host) return;
 
     const margin = 12;
-    const popupW = 340;
-    const popupH = 180;
+    // Use actual rendered dimensions when available; fall back to generous estimates
+    const popupW = this.popupEl?.offsetWidth || 340;
+    const popupH = this.popupEl?.offsetHeight || 340;
 
     let left = x - popupW / 2;
     let top = y + margin;
@@ -596,21 +597,27 @@ export class TranslationPopup {
       ? this.buildWordChips(result.sourceText)
       : "";
 
-    // Insights section (pronunciation, word type, example) for single words only
-    let insightsHtml = "";
-    if (isWord) {
-      if (result.exampleSentence) {
-        insightsHtml = this.buildInsightsHtml(
-          result.pronunciation ?? "",
-          result.wordType ?? "",
-          result.exampleSentence,
-          result.exampleSentenceIrish ?? ""
-        );
-      } else {
-        // Empty slot filled asynchronously — no spinner
-        insightsHtml = `<div class="cf-insights-slot"></div>`;
-      }
-    }
+    // Pronunciation + word-type row (shown directly in body for single words)
+    const metaHtml = (isWord && (result.pronunciation || result.wordType)) ? (() => {
+      const p = result.pronunciation ? `<span class="cf-pron">/${escapeHtml(result.pronunciation)}/</span>` : "";
+      const sep = (result.pronunciation && result.wordType) ? `<span class="cf-meta-sep">&#183;</span>` : "";
+      const t = result.wordType ? `<span class="cf-word-type-badge">${escapeHtml(result.wordType)}</span>` : "";
+      return `<div class="cf-meta">${p}${sep}${t}</div>`;
+    })() : "";
+
+    // Note shown when the word has the same spelling in Irish
+    const sameWordHtml = result.sameInBothLanguages
+      ? `<div class="cf-same-word">&#x2139; Same spelling in Irish</div>`
+      : "";
+
+    // Example sentence card (single words only; hidden when same in both languages)
+    const exampleHtml = (isWord && !result.sameInBothLanguages && result.exampleSentence)
+      ? `<div class="cf-example">
+           <div class="cf-example-label">&#x1F4A1; Try it in a sentence</div>
+           <div class="cf-example-en">${escapeHtml(result.exampleSentence)}</div>
+           <div class="cf-example-ga">${escapeHtml(result.exampleSentenceIrish ?? "")}</div>
+         </div>`
+      : "";
 
     const truncatedNote = truncated
       ? `<div class="cf-truncated-note">&#x26A0; Only the first 500 characters were translated.</div>`
@@ -640,9 +647,11 @@ export class TranslationPopup {
           ${speakHtml}
         </div>
         ${phoneticHtml}
+        ${sameWordHtml}
+        ${metaHtml}
         ${contextHtml}
         ${wordChipsHtml}
-        ${insightsHtml}
+        ${exampleHtml}
         ${truncatedNote}
       </div>
       <div class="cf-actions">${saveAreaHtml}</div>

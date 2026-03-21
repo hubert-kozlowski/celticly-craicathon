@@ -12,6 +12,10 @@ export interface TranslationProvider {
     word: string,
     irishWord: string
   ): Promise<{ english: string; irish: string; pronunciation: string; wordType: string } | null>;
+  generateHints(
+    sourceWord: string,
+    irishWord: string
+  ): Promise<{ hints: string[]; phonetic: string } | null>;
   synthesizeSpeech(text: string, langCode: string): Promise<string>;
 }
 
@@ -21,12 +25,12 @@ export interface TranslationProvider {
 
 const GOOGLE_TRANSLATE_ENDPOINT =
   "https://translation.googleapis.com/language/translate/v2";
-// ── ElevenLabs Text-to-Speech ────────────────────────────────────────────────
-// Docs: https://elevenlabs.io/docs/api-reference/text-to-speech
-// eleven_multilingual_v2 model supports Irish (Gaeilge).
-const ELEVENLABS_TTS_ENDPOINT = "https://api.elevenlabs.io/v1/text-to-speech";
-// Default: "Adam" voice – neutral, works well with Irish through the multilingual model.
-const ELEVENLABS_DEFAULT_VOICE_ID = "pNInz6obpgDQGcFmaJgB";
+// ── Abair.ie Text-to-Speech ─────────────────────────────────────────────────
+// API at api.abair.ie — Irish-language TTS built at Trinity College Dublin.
+// No API key required. Supports Connacht, Munster, and Ulster dialects.
+const ABAIR_TTS_ENDPOINT = "https://api.abair.ie/v3/synthesis";
+// Default voice: Sibéal — Connemara (Connacht Irish), female, PIPER model.
+const ABAIR_DEFAULT_VOICE = "ga_CO_snc_piper";
 // ── Google Gemini ─────────────────────────────────────────────────────────────
 // Used for generating context-aware example sentences.
 // Requires the "Generative Language API" to be enabled on the same project.
@@ -35,8 +39,7 @@ const GEMINI_ENDPOINT =
 
 export class GoogleTranslationProvider implements TranslationProvider {
   constructor(
-    private readonly apiKey: string,
-    private readonly elevenLabsApiKey: string = ""
+    private readonly apiKey: string
   ) {}
 
   /** Core translate call – returns a full TranslationResult. */
@@ -45,6 +48,7 @@ export class GoogleTranslationProvider implements TranslationProvider {
     return {
       sourceText: text,
       irishText: translated,
+      sameInBothLanguages: translated.toLowerCase().trim() === text.toLowerCase().trim(),
       isWord: !text.includes(" "),
       provider: "google",
       fromCache: false,
@@ -116,7 +120,7 @@ export class GoogleTranslationProvider implements TranslationProvider {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { maxOutputTokens: 120, temperature: 0.5 },
         }),
-        signal: AbortSignal.timeout(7000),
+        signal: AbortSignal.timeout(4000),
       });
 
       if (!resp.ok) return null;
@@ -146,45 +150,101 @@ export class GoogleTranslationProvider implements TranslationProvider {
   }
 
   /**
-   * Call ElevenLabs TTS API and return base64-encoded MP3 audio.
-   * Uses the eleven_multilingual_v2 model which supports Irish (Gaeilge).
+   * Call Gemini to produce hint words (similar/related English words) and a
+   * phonetic pronunciation guide for the Irish word. Returns null on failure.
+   */
+  async generateHints(
+    sourceWord: string,
+    irishWord: string
+  ): Promise<{ hints: string[]; phonetic: string } | null> {
+    try {
+      const prompt =
+        `For the English word "${sourceWord}" (Irish: "${irishWord}"), reply with EXACTLY these lines and nothing else:\n` +
+        `PHONETIC: readable pronunciation of the Irish word for an English speaker (e.g. "GAH-luh")\n` +
+        `HINT1: a single English synonym or closely related word (NOT the answer "${sourceWord}")\n` +
+        `HINT2: another single English synonym or related word (NOT the answer "${sourceWord}")\n` +
+        `HINT3: a third single English synonym or related word (NOT the answer "${sourceWord}")`;
+
+      const url = `${GEMINI_ENDPOINT}?key=${encodeURIComponent(this.apiKey)}`;
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 100, temperature: 0.7 },
+        }),
+        signal: AbortSignal.timeout(4000),
+      });
+
+      if (!resp.ok) return null;
+
+      const data = (await resp.json()) as {
+        candidates?: Array<{
+          content?: { parts?: Array<{ text?: string }> };
+        }>;
+      };
+
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      const phoneticMatch = raw.match(/PHONETIC:\s*(.+)/i);
+      const hint1 = raw.match(/HINT1:\s*(.+)/i);
+      const hint2 = raw.match(/HINT2:\s*(.+)/i);
+      const hint3 = raw.match(/HINT3:\s*(.+)/i);
+
+      const hints = [hint1, hint2, hint3]
+        .filter((m): m is RegExpMatchArray => m !== null)
+        .map((m) => m[1].trim())
+        .filter((h) => h.toLowerCase() !== sourceWord.toLowerCase());
+
+      return {
+        hints,
+        phonetic: phoneticMatch ? phoneticMatch[1].trim() : "",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Call abair.ie TTS API and return base64-encoded WAV audio.
+   * No API key required. Uses the PIPER neural voice for natural Irish speech.
    */
   async synthesizeSpeech(text: string, _langCode: string): Promise<string> {
-    if (!this.elevenLabsApiKey) {
-      throw new Error("No ElevenLabs API key configured");
-    }
-    const url = `${ELEVENLABS_TTS_ENDPOINT}/${ELEVENLABS_DEFAULT_VOICE_ID}`;
-    const resp = await fetch(url, {
+    const resp = await fetch(ABAIR_TTS_ENDPOINT, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "xi-api-key": this.elevenLabsApiKey,
-        "Accept": "audio/mpeg",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        text,
-        model_id: "eleven_multilingual_v2",
-        voice_settings: { stability: 0.5, similarity_boost: 0.75, speed: 0.85 },
+        synthinput: { text, ssml: "string" },
+        voiceparams: {
+          languageCode: "ga-IE",
+          name: ABAIR_DEFAULT_VOICE,
+          ssmlGender: "UNSPECIFIED",
+        },
+        audioconfig: {
+          audioEncoding: "LINEAR16",
+          speakingRate: 1,
+          volumeGainDb: 1,
+          htsParams: "string",
+          sampleRateHertz: 0,
+          effectsProfileId: [],
+        },
+        outputType: "JSON",
       }),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(30000),
     });
 
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
-      throw new Error(`ElevenLabs TTS returned HTTP ${resp.status}: ${body}`);
+      throw new Error(`Abair.ie TTS returned HTTP ${resp.status}: ${body}`);
     }
 
-    // Convert binary audio/mpeg response to base64
-    const buffer = await resp.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    let binary = "";
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i]);
+    const data = (await resp.json()) as { audioContent?: string };
+    if (!data.audioContent) {
+      throw new Error("Abair.ie TTS returned no audio content");
     }
-    return btoa(binary);
+    return data.audioContent;
   }
 }
 
-export function createProvider(apiKey: string, elevenLabsApiKey = ""): TranslationProvider {
-  return new GoogleTranslationProvider(apiKey, elevenLabsApiKey);
+export function createProvider(apiKey: string): TranslationProvider {
+  return new GoogleTranslationProvider(apiKey);
 }

@@ -9,6 +9,7 @@ export interface TranslationResult {
   exampleSentenceIrish?: string;    // AI-generated daily-life example (Irish)
   pronunciation?: string;           // readable phonetic guide for the Irish word
   wordType?: string;                // grammatical type, e.g. "masculine noun", "verb"
+  sameInBothLanguages?: boolean;    // true when Irish translation matches the source (loanwords, proper nouns)
   isWord?: boolean;                 // true when source is a single token
   provider: string;
   fromCache: boolean;
@@ -26,7 +27,6 @@ export interface SavedWord {
 export interface ExtensionSettings {
   enabled: boolean;
   apiKey: string;             // Google Cloud Translation API key
-  elevenLabsApiKey: string;   // ElevenLabs TTS API key
   popupAutoDismissMs: number; // 0 = stay until dismissed manually
   showPhonetics: boolean;
   theme: 'light' | 'dark' | 'auto'; // 'auto' follows OS preference
@@ -35,7 +35,6 @@ export interface ExtensionSettings {
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   enabled: true,
   apiKey: "",
-  elevenLabsApiKey: "",
   popupAutoDismissMs: 8000,
   showPhonetics: false,
   theme: 'light',

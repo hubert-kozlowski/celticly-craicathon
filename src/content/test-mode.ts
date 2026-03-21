@@ -11,13 +11,40 @@ let correctCount = 0;
 let totalCount = 0;
 let progressBar: HTMLElement | null = null;
 let activeInput: HTMLElement | null = null;
+let messageFn: SendMessageFn | null = null;
 
 // Tags whose text content is never candidate material
 const SKIP_TAGS = new Set([
   "SCRIPT", "STYLE", "NOSCRIPT", "IFRAME", "SVG", "CODE", "PRE",
   "INPUT", "TEXTAREA", "SELECT", "BUTTON", "LABEL", "OPTION",
-  "HEAD", "META", "LINK",
+  "HEAD", "META", "LINK", "NAV", "FOOTER",
 ]);
+
+// Ancestor selectors that make text inaccessible for hovering/interaction
+const SKIP_ANCESTOR_SELECTOR =
+  'a, button, [role="button"], [onclick], [contenteditable="true"], summary';
+
+/** Check whether a text node lives in a visible, non-interactive context. */
+function isNodeEligible(node: Node): boolean {
+  const parent = node.parentElement;
+  if (!parent) return false;
+  if (SKIP_TAGS.has(parent.tagName)) return false;
+  if (parent.closest("[data-celticly-test]")) return false;
+  // Reject text inside interactive elements (links, buttons, etc.)
+  if (parent.closest(SKIP_ANCESTOR_SELECTOR)) return false;
+  // Reject hidden or zero-size elements
+  const el = parent;
+  if (el.offsetParent === null && el.tagName !== "BODY" && el.tagName !== "HTML") {
+    // offsetParent is null for hidden elements (display:none or not in DOM)
+    const style = getComputedStyle(el);
+    if (style.position !== "fixed" && style.position !== "sticky") return false;
+  }
+  const rect = el.getBoundingClientRect();
+  if (rect.width < 2 || rect.height < 2) return false;
+  // Reject elements scrolled out of the document entirely (e.g. overflow:hidden crops)
+  if (rect.bottom < 0 || rect.top > document.documentElement.clientHeight * 2) return false;
+  return true;
+}
 
 // ── Public API ─────────────────────────────────────────────────────────────────
 
@@ -27,21 +54,23 @@ export async function startTestMode(
   sendMessage: SendMessageFn
 ): Promise<void> {
   // Clean up any prior test first
-  stopTestMode();
+  cleanupTestMode();
+  messageFn = sendMessage;
 
   const candidates = collectCandidateWords(wordCount);
   if (candidates.length === 0) return;
 
   // Translate all candidates in parallel (cache hits are instant)
   const results = await Promise.all(
-    candidates.map(async (word): Promise<[string, string] | null> => {
+    candidates.map(async (word): Promise<[string, string, string] | null> => {
       try {
         const resp = await sendMessage({ type: "TRANSLATE", text: word });
         if (resp.ok && "result" in resp) {
           const irish = resp.result.irishText.trim();
           // Skip words where translation equals original (no useful quiz item)
           if (irish.toLowerCase() !== word.toLowerCase() && irish.length > 0) {
-            return [word, irish];
+            const pronunciation = resp.result.pronunciation ?? "";
+            return [word, irish, pronunciation];
           }
         }
       } catch {
@@ -51,8 +80,10 @@ export async function startTestMode(
     })
   );
 
-  const wordMap = new Map<string, string>(
-    results.filter((t): t is [string, string] => t !== null)
+  const wordMap = new Map<string, { irish: string; pronunciation: string }>(
+    results
+      .filter((t): t is [string, string, string] => t !== null)
+      .map(([word, irish, pronunciation]) => [word, { irish, pronunciation }])
   );
 
   if (wordMap.size === 0) return;
@@ -63,11 +94,21 @@ export async function startTestMode(
   injectProgressBar();
 }
 
-/** Stop the test, reverting all DOM mutations. */
-export function stopTestMode(): void {
+/** Stop the test, reverting all DOM mutations. If userQuit is true, show summary first. */
+export function stopTestMode(userQuit = false): void {
+  if (userQuit && totalCount > 0) {
+    const missed = collectMissedWords();
+    showResultsOverlay(false, correctCount, totalCount, missed);
+  }
+  cleanupTestMode();
+}
+
+/** Internal cleanup — revert DOM, remove UI, reset state. */
+function cleanupTestMode(): void {
   revertAllSpans();
   removeProgressBar();
   removeActiveInput();
+  removeResultsOverlay();
   correctCount = 0;
   totalCount = 0;
 }
@@ -84,11 +125,7 @@ function collectCandidateWords(max: number): string[] {
     NodeFilter.SHOW_TEXT,
     {
       acceptNode(node) {
-        const parent = node.parentElement;
-        if (!parent) return NodeFilter.FILTER_REJECT;
-        if (SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
-        if (parent.closest("[data-celticly-test]")) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
+        return isNodeEligible(node) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
       },
     }
   );
@@ -120,7 +157,7 @@ function shuffleArray<T>(arr: T[]): void {
 
 // ── DOM replacement ────────────────────────────────────────────────────────────
 
-function replaceWordsInDom(wordMap: Map<string, string>): void {
+function replaceWordsInDom(wordMap: Map<string, { irish: string; pronunciation: string }>): void {
   const escaped = Array.from(wordMap.keys()).map(escapeRegex);
   const pattern = new RegExp(`\\b(${escaped.join("|")})\\b`, "gi");
 
@@ -131,10 +168,7 @@ function replaceWordsInDom(wordMap: Map<string, string>): void {
     NodeFilter.SHOW_TEXT,
     {
       acceptNode(node) {
-        const parent = node.parentElement;
-        if (!parent) return NodeFilter.FILTER_REJECT;
-        if (SKIP_TAGS.has(parent.tagName)) return NodeFilter.FILTER_REJECT;
-        if (parent.closest("[data-celticly-test]")) return NodeFilter.FILTER_REJECT;
+        if (!isNodeEligible(node)) return NodeFilter.FILTER_REJECT;
         pattern.lastIndex = 0;
         return pattern.test(node.textContent ?? "")
           ? NodeFilter.FILTER_ACCEPT
@@ -161,11 +195,14 @@ function replaceWordsInDom(wordMap: Map<string, string>): void {
         frag.appendChild(document.createTextNode(text.slice(lastIndex, start)));
       }
 
-      const irishText = wordMap.get(word.toLowerCase()) ?? word;
+      const entry = wordMap.get(word.toLowerCase());
+      const irishText = entry?.irish ?? word;
+      const pronunciation = entry?.pronunciation ?? "";
       const span = document.createElement("span");
       span.dataset.celticlyTest = "word";
       span.dataset.original = word;
       span.dataset.irish = irishText;
+      span.dataset.pronunciation = pronunciation;
       span.dataset.answered = "false";
       span.textContent = irishText;
       applySpanUnansweredStyle(span);
@@ -211,7 +248,7 @@ function onSpanHover(span: HTMLElement): void {
 
   // Fixed positioning uses viewport coords — getBoundingClientRect is already viewport-relative
   const top = rect.bottom + 4;
-  const left = Math.min(rect.left, window.innerWidth - 210);
+  const left = Math.min(rect.left, window.innerWidth - 260);
 
   wrap.style.cssText = [
     "position:fixed",
@@ -221,13 +258,29 @@ function onSpanHover(span: HTMLElement): void {
     "background:#fff",
     "border:1.5px solid #16A34A",
     "border-radius:8px",
-    "padding:5px 10px",
+    "padding:8px 10px",
     "box-shadow:0 4px 16px rgba(0,0,0,0.15)",
     "display:flex",
-    "align-items:center",
+    "flex-direction:column",
     "gap:6px",
     "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
+    "max-width:260px",
   ].join(";");
+
+  // ── Phonetic pronunciation ──
+  const pronunciation = span.dataset.pronunciation ?? "";
+  if (pronunciation) {
+    const phoneticRow = document.createElement("div");
+    phoneticRow.style.cssText =
+      "font-size:12px;color:#6B7280;font-style:italic;padding:0 2px;" +
+      "display:flex;align-items:center;gap:4px;";
+    phoneticRow.textContent = `🔤 ${pronunciation}`;
+    wrap.appendChild(phoneticRow);
+  }
+
+  // ── Input row ──
+  const inputRow = document.createElement("div");
+  inputRow.style.cssText = "display:flex;align-items:center;gap:6px;";
 
   const flag = document.createElement("span");
   flag.textContent = "🇮🇪";
@@ -241,8 +294,70 @@ function onSpanHover(span: HTMLElement): void {
   input.setAttribute("autocapitalize", "off");
   input.setAttribute("spellcheck", "false");
   input.style.cssText =
-    "border:none;outline:none;font-size:13px;width:130px;" +
+    "border:none;outline:none;font-size:13px;width:120px;" +
     "background:transparent;color:#1C1C1E;font-family:inherit;";
+
+  // ── Hint button ──
+  const hintBtn = document.createElement("button");
+  hintBtn.textContent = "💡";
+  hintBtn.title = "Get a hint";
+  hintBtn.style.cssText =
+    "background:rgba(22,163,74,0.10);border:1px solid rgba(22,163,74,0.3);" +
+    "border-radius:5px;padding:2px 6px;font-size:13px;cursor:pointer;" +
+    "transition:background 0.15s;flex-shrink:0;";
+  hintBtn.addEventListener("mouseenter", () => {
+    hintBtn.style.background = "rgba(22,163,74,0.22)";
+  });
+  hintBtn.addEventListener("mouseleave", () => {
+    hintBtn.style.background = "rgba(22,163,74,0.10)";
+  });
+
+  // ── Hint area (hidden initially) ──
+  const hintArea = document.createElement("div");
+  hintArea.style.cssText = "display:none;font-size:12px;color:#4B5563;padding:2px 2px 0;";
+
+  let hintRequested = false;
+  hintBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (hintRequested) return;
+    hintRequested = true;
+    hintBtn.textContent = "⏳";
+    hintBtn.style.cursor = "default";
+
+    const original = span.dataset.original ?? "";
+    const irishText = span.dataset.irish ?? "";
+
+    if (messageFn) {
+      try {
+        const resp = await messageFn({
+          type: "GET_HINT",
+          sourceText: original,
+          irishText,
+        });
+        if (resp.ok && "hints" in resp) {
+          const lines: string[] = [];
+          if (resp.hints.length > 0) {
+            lines.push("Similar words: " + resp.hints.join(", "));
+          }
+          if (resp.phonetic && !pronunciation) {
+            lines.push(`🔤 ${resp.phonetic}`);
+          }
+          hintArea.textContent = lines.length > 0 ? lines.join(" · ") : "No hints available";
+        } else {
+          hintArea.textContent = "Could not load hints";
+        }
+      } catch {
+        hintArea.textContent = "Could not load hints";
+      }
+    } else {
+      hintArea.textContent = "Hints unavailable";
+    }
+
+    hintBtn.textContent = "💡";
+    hintBtn.style.cursor = "default";
+    hintBtn.style.opacity = "0.5";
+    hintArea.style.display = "block";
+  });
 
   input.addEventListener("keydown", (e) => {
     e.stopPropagation();
@@ -255,9 +370,13 @@ function onSpanHover(span: HTMLElement): void {
     }
   });
 
+  inputRow.appendChild(flag);
+  inputRow.appendChild(input);
+  inputRow.appendChild(hintBtn);
+
   wrap.addEventListener("mouseleave", onWrapLeave);
-  wrap.appendChild(flag);
-  wrap.appendChild(input);
+  wrap.appendChild(inputRow);
+  wrap.appendChild(hintArea);
   document.body.appendChild(wrap);
   activeInput = wrap;
 
@@ -379,7 +498,7 @@ function injectProgressBar(): void {
   stopBtn.addEventListener("mouseleave", () => {
     stopBtn.style.background = "rgba(255,255,255,0.10)";
   });
-  stopBtn.addEventListener("click", stopTestMode);
+  stopBtn.addEventListener("click", () => stopTestMode(true));
 
   bar.appendChild(label);
   bar.appendChild(stopBtn);
@@ -398,11 +517,196 @@ function removeProgressBar(): void {
 }
 
 function onTestComplete(): void {
-  const label = document.getElementById("cf-test-bar-label");
-  if (label) {
-    label.textContent = `🎉 Tá tú foirfe! ${totalCount} / ${totalCount}`;
-    label.style.color = "#34D399";
+  removeActiveInput();
+  const missed = collectMissedWords();
+  showResultsOverlay(true, correctCount, totalCount, missed);
+}
+
+// ── Results overlay ────────────────────────────────────────────────────────────
+
+let resultsOverlay: HTMLElement | null = null;
+
+/** Gather unanswered words still on the page. */
+function collectMissedWords(): Array<{ english: string; irish: string }> {
+  const seen = new Set<string>();
+  const missed: Array<{ english: string; irish: string }> = [];
+  document.querySelectorAll<HTMLElement>('[data-celticly-test="word"]').forEach((s) => {
+    if (s.dataset.answered !== "true") {
+      const key = (s.dataset.original ?? "").toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        missed.push({
+          english: s.dataset.original ?? "",
+          irish: s.dataset.irish ?? "",
+        });
+      }
+    }
+  });
+  return missed;
+}
+
+/** Show a centered overlay with test results. */
+function showResultsOverlay(
+  completed: boolean,
+  correct: number,
+  total: number,
+  missed: Array<{ english: string; irish: string }>
+): void {
+  removeResultsOverlay();
+
+  const backdrop = document.createElement("div");
+  backdrop.id = "cf-results-overlay";
+  backdrop.style.cssText = [
+    "position:fixed",
+    "inset:0",
+    "z-index:2147483647",
+    "background:rgba(0,0,0,0.55)",
+    "display:flex",
+    "align-items:center",
+    "justify-content:center",
+    "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
+  ].join(";");
+
+  const card = document.createElement("div");
+  card.style.cssText = [
+    "background:#fff",
+    "border-radius:16px",
+    "padding:32px 36px",
+    "max-width:420px",
+    "width:90vw",
+    "max-height:80vh",
+    "overflow-y:auto",
+    "box-shadow:0 12px 48px rgba(0,0,0,0.3)",
+    "text-align:center",
+    "color:#1C1C2E",
+  ].join(";");
+
+  // ── Emoji + Title ──
+  const emoji = document.createElement("div");
+  emoji.style.cssText = "font-size:48px;margin-bottom:8px;";
+  emoji.textContent = completed ? "🎉" : "🍀";
+
+  const title = document.createElement("div");
+  title.style.cssText = "font-size:22px;font-weight:700;margin-bottom:4px;";
+  title.textContent = completed ? "Tá tú foirfe!" : "Test Ended";
+
+  const subtitle = document.createElement("div");
+  subtitle.style.cssText = "font-size:14px;color:#6B7280;margin-bottom:20px;";
+  subtitle.textContent = completed
+    ? "You got every word right — go n-éirí leat!"
+    : "You quit early — here's how you did.";
+
+  card.appendChild(emoji);
+  card.appendChild(title);
+  card.appendChild(subtitle);
+
+  // ── Score ──
+  const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
+  const scoreWrap = document.createElement("div");
+  scoreWrap.style.cssText = [
+    "display:flex",
+    "justify-content:center",
+    "gap:24px",
+    "margin-bottom:20px",
+  ].join(";");
+
+  const makeStatBox = (value: string, label: string, color: string) => {
+    const box = document.createElement("div");
+    box.style.cssText = `background:${color};border-radius:10px;padding:12px 18px;min-width:80px;`;
+    const val = document.createElement("div");
+    val.style.cssText = "font-size:28px;font-weight:800;color:#1C1C2E;";
+    val.textContent = value;
+    const lbl = document.createElement("div");
+    lbl.style.cssText = "font-size:11px;color:#4B5563;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px;";
+    lbl.textContent = label;
+    box.appendChild(val);
+    box.appendChild(lbl);
+    return box;
+  };
+
+  scoreWrap.appendChild(makeStatBox(`${correct}/${total}`, "Score", "rgba(22,163,74,0.10)"));
+  scoreWrap.appendChild(makeStatBox(`${pct}%`, "Accuracy", "rgba(59,130,246,0.10)"));
+  card.appendChild(scoreWrap);
+
+  // ── Missed words table ──
+  if (missed.length > 0) {
+    const missedTitle = document.createElement("div");
+    missedTitle.style.cssText =
+      "font-size:13px;font-weight:600;color:#6B7280;text-transform:uppercase;" +
+      "letter-spacing:0.5px;margin-bottom:8px;text-align:left;";
+    missedTitle.textContent = `Words to review (${missed.length})`;
+    card.appendChild(missedTitle);
+
+    const table = document.createElement("div");
+    table.style.cssText =
+      "background:#F9FAFB;border-radius:8px;padding:8px 12px;text-align:left;" +
+      "max-height:180px;overflow-y:auto;margin-bottom:20px;";
+
+    for (const { english, irish } of missed) {
+      const row = document.createElement("div");
+      row.style.cssText =
+        "display:flex;justify-content:space-between;padding:5px 0;" +
+        "border-bottom:1px solid rgba(0,0,0,0.06);font-size:13px;";
+
+      const eng = document.createElement("span");
+      eng.style.cssText = "color:#1C1C2E;font-weight:500;";
+      eng.textContent = english;
+
+      const irl = document.createElement("span");
+      irl.style.cssText = "color:#16A34A;font-style:italic;";
+      irl.textContent = irish;
+
+      row.appendChild(eng);
+      row.appendChild(irl);
+      table.appendChild(row);
+    }
+    // Remove last border
+    const lastRow = table.lastElementChild as HTMLElement | null;
+    if (lastRow) lastRow.style.borderBottom = "none";
+
+    card.appendChild(table);
   }
+
+  // ── Close button ──
+  const closeBtn = document.createElement("button");
+  closeBtn.textContent = "Close";
+  closeBtn.style.cssText = [
+    "background:#16A34A",
+    "color:#fff",
+    "border:none",
+    "border-radius:8px",
+    "padding:10px 32px",
+    "font-size:14px",
+    "font-weight:600",
+    "cursor:pointer",
+    "font-family:inherit",
+    "transition:background 0.15s",
+  ].join(";");
+  closeBtn.addEventListener("mouseenter", () => {
+    closeBtn.style.background = "#15803D";
+  });
+  closeBtn.addEventListener("mouseleave", () => {
+    closeBtn.style.background = "#16A34A";
+  });
+  closeBtn.addEventListener("click", () => {
+    cleanupTestMode();
+  });
+
+  card.appendChild(closeBtn);
+  backdrop.appendChild(card);
+
+  // Close on backdrop click
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) cleanupTestMode();
+  });
+
+  document.body.appendChild(backdrop);
+  resultsOverlay = backdrop;
+}
+
+function removeResultsOverlay(): void {
+  resultsOverlay?.remove();
+  resultsOverlay = null;
 }
 
 // ── Revert all mutations ───────────────────────────────────────────────────────

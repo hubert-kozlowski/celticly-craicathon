@@ -68,9 +68,6 @@ async function handleMessage(
     case "TRANSLATE":
       return handleTranslate(request.text, request.context);
 
-    case "GET_EXAMPLE":
-      return handleGetExample(request.sourceText, request.irishText);
-
     case "SAVE_WORD":
       return handleSaveWord(
         request.sourceText,
@@ -106,6 +103,9 @@ async function handleMessage(
 
     case "SPEAK_WORD":
       return handleSpeakWord(request.text, request.langCode);
+
+    case "GET_HINT":
+      return handleGetHint(request.sourceText, request.irishText);
 
     default:
       return { ok: false, error: "Unknown message type", code: "UNKNOWN" };
@@ -149,7 +149,7 @@ async function handleTranslate(rawText: string, context?: string): Promise<Exten
     };
   }
 
-  const provider = createProvider(settings.apiKey, settings.elevenLabsApiKey);
+  const provider = createProvider(settings.apiKey);
   const contextPromise = context && isWord
     ? translateContextSentence(context, text, TARGET_LANG)
     : Promise.resolve(null);
@@ -161,6 +161,19 @@ async function handleTranslate(rawText: string, context?: string): Promise<Exten
 
   if (contextSentenceIrish) {
     result.contextSentenceIrish = contextSentenceIrish;
+  }
+
+  // 3. For single words, fetch rich insights (phonetics, type, example) via Gemini.
+  //    Runs inline so the popup shows complete data in one shot.
+  //    4 s timeout prevents blocking on slow API; silently degrades if unavailable.
+  if (isWord && !result.sameInBothLanguages) {
+    const insights = await provider.generateWordInsights(text, result.irishText).catch(() => null);
+    if (insights) {
+      result.pronunciation = insights.pronunciation || undefined;
+      result.wordType = insights.wordType || undefined;
+      result.exampleSentence = insights.english;
+      result.exampleSentenceIrish = insights.irish;
+    }
   }
 
   // 4. Cache the core result (without context sentence, which varies per page)
@@ -179,7 +192,7 @@ async function translateContextSentence(
 ): Promise<string | null> {
   const settings = await getSettings();
   if (!settings.apiKey) return null;
-  const provider = createProvider(settings.apiKey, settings.elevenLabsApiKey);
+  const provider = createProvider(settings.apiKey);
   try {
     return await provider.translateRaw(context.slice(0, MAX_CONTEXT_LENGTH), targetLang);
   } catch {
@@ -187,37 +200,6 @@ async function translateContextSentence(
   }
 }
 
-// ── Example sentence generation ───────────────────────────────────────────────
-
-async function handleGetExample(
-  sourceText: string,
-  irishText: string
-): Promise<ExtensionResponse> {
-  // Only generate examples for single words
-  if (sourceText.includes(" ")) {
-    return { ok: false, error: "Examples only for single words", code: "UNKNOWN" };
-  }
-
-  const settings = await getSettings();
-  if (!settings.apiKey) {
-    return { ok: false, error: "No API key", code: "NO_API_KEY" };
-  }
-
-  const provider = createProvider(settings.apiKey, settings.elevenLabsApiKey);
-  const insights = await provider.generateWordInsights(sourceText, irishText);
-
-  if (!insights) {
-    return { ok: false, error: "Could not generate insights", code: "UNKNOWN" };
-  }
-
-  return {
-    ok: true,
-    exampleSentence: insights.english,
-    exampleSentenceIrish: insights.irish,
-    pronunciation: insights.pronunciation,
-    wordType: insights.wordType,
-  };
-}
 // ── TTS logic ──────────────────────────────────────────────────────────────────────
 
 async function handleSpeakWord(
@@ -225,12 +207,28 @@ async function handleSpeakWord(
   langCode: string
 ): Promise<ExtensionResponse> {
   const settings = await getSettings();
-  if (!settings.elevenLabsApiKey) {
-    return { ok: false, error: "No ElevenLabs API key configured. Open extension settings to add your key.", code: "NO_API_KEY" };
-  }
-  const provider = createProvider(settings.apiKey, settings.elevenLabsApiKey);
+  const provider = createProvider(settings.apiKey);
   const audioContent = await provider.synthesizeSpeech(text, langCode);
   return { ok: true, audioContent };
+}
+
+// ── Hint logic ─────────────────────────────────────────────────────────────────
+
+async function handleGetHint(
+  sourceText: string,
+  irishText: string
+): Promise<ExtensionResponse> {
+  const settings = await getSettings();
+  if (!settings.apiKey) {
+    return { ok: false, error: "No API key configured.", code: "NO_API_KEY" };
+  }
+  const provider = createProvider(settings.apiKey);
+  const result = await provider.generateHints(sourceText, irishText);
+  return {
+    ok: true,
+    hints: result?.hints ?? [],
+    phonetic: result?.phonetic ?? "",
+  };
 }
 // ── Save word logic ───────────────────────────────────────────────────────────
 

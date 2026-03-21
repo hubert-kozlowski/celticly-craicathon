@@ -30,7 +30,6 @@ function applyTheme(theme: "light" | "dark" | "auto"): void {
 
 // DOM refs
 const apiKeyInput = document.getElementById("api-key") as HTMLInputElement;
-const elevenLabsApiKeyInput = document.getElementById("elevenlabs-api-key") as HTMLInputElement;
 const enabledToggle = document.getElementById("enabled") as HTMLInputElement;
 const autoDismissInput = document.getElementById("auto-dismiss") as HTMLInputElement;
 const themeSelect = document.getElementById("theme") as HTMLSelectElement;
@@ -49,7 +48,6 @@ async function loadSettings(): Promise<void> {
   if (resp.ok && "settings" in resp) {
     const s = resp.settings as ExtensionSettings;
     apiKeyInput.value = s.apiKey;
-    elevenLabsApiKeyInput.value = s.elevenLabsApiKey ?? "";
     enabledToggle.checked = s.enabled;
     autoDismissInput.value = String(s.popupAutoDismissMs);
     themeSelect.value = s.theme ?? "light";
@@ -105,7 +103,6 @@ themeSelect.addEventListener("change", () => {
 saveBtn.addEventListener("click", async () => {
   const settings: Partial<ExtensionSettings> = {
     apiKey: apiKeyInput.value.trim(),
-    elevenLabsApiKey: elevenLabsApiKeyInput.value.trim(),
     enabled: enabledToggle.checked,
     popupAutoDismissMs: Math.max(0, parseInt(autoDismissInput.value, 10) || 0),
     theme: themeSelect.value as "light" | "dark" | "auto",

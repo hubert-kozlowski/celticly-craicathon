@@ -52,6 +52,12 @@ export interface SpeakWordRequest {
   langCode: string;
 }
 
+export interface GetHintRequest {
+  type: "GET_HINT";
+  sourceText: string;
+  irishText: string;
+}
+
 export type ExtensionRequest =
   | TranslateRequest
   | SaveWordRequest
@@ -60,8 +66,8 @@ export type ExtensionRequest =
   | GetSettingsRequest
   | SaveSettingsRequest
   | ClearCacheRequest
-  | GetExampleRequest
-  | SpeakWordRequest;
+  | SpeakWordRequest
+  | GetHintRequest;
 
 // ── Inbound: service worker → content script ───────────────────────────────
 
@@ -107,7 +113,13 @@ export interface GetExampleResponse {
 
 export interface SpeakWordResponse {
   ok: true;
-  audioContent: string; // base64-encoded MP3
+  audioContent: string; // base64-encoded WAV
+}
+
+export interface GetHintResponse {
+  ok: true;
+  hints: string[];       // similar English words as clues
+  phonetic: string;      // phonetic pronunciation of the Irish word
 }
 
 export interface ErrorResponse {
@@ -124,6 +136,6 @@ export type ExtensionResponse =
   | GetSettingsResponse
   | SaveSettingsResponse
   | ClearCacheResponse
-  | GetExampleResponse
   | SpeakWordResponse
+  | GetHintResponse
   | ErrorResponse;

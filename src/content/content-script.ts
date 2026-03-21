@@ -58,7 +58,7 @@ function onRuntimeMessage(
     return;
   }
   if (message.type === "STOP_TEST") {
-    stopTestMode();
+    stopTestMode(true);
     return;
   }
   if (message.type === "TRANSLATE_SELECTION" && message.text) {
@@ -85,6 +85,21 @@ function evaluateSelection(mouseX: number, mouseY: number): void {
 
   const text = sel.toString().trim();
   if (!text || text.length < 2) {
+    dismissPopup();
+    return;
+  }
+
+  const isSingleToken = !text.includes(" ");
+
+  // Skip very short single tokens (single letters like "a", "I") unless they
+  // contain Irish-specific accented characters (e.g. \u00e9 = "\u00e9")
+  if (isSingleToken && text.length < 3 && !/[\u00e1\u00e9\u00ed\u00f3\u00fa\u00c1\u00c9\u00cd\u00d3\u00da]/.test(text)) {
+    dismissPopup();
+    return;
+  }
+
+  // Skip obvious acronyms/abbreviations (2\u20136 uppercase letters with no lowercase)
+  if (isSingleToken && /^[A-Z]{2,6}$/.test(text)) {
     dismissPopup();
     return;
   }
@@ -176,29 +191,11 @@ function triggerTranslation(text: string, x: number, y: number, context?: string
             if (!cleanText) return;
             const resp = await sendMessage({ type: "SPEAK_WORD", text: cleanText, langCode: "ga-IE" });
             if (resp.ok && "audioContent" in resp) {
-              const audio = new Audio(`data:audio/mp3;base64,${(resp as { audioContent: string }).audioContent}`);
+              const audio = new Audio(`data:audio/wav;base64,${(resp as { audioContent: string }).audioContent}`);
               audio.play().catch(() => { /* autoplay policy – silently ignore */ });
             }
           },
         });
-
-        // For single words, asynchronously fetch a daily-life example sentence
-        if (isWord && !resp.result.exampleSentence) {
-          sendMessage({ type: "GET_EXAMPLE", sourceText: resp.result.sourceText, irishText: resp.result.irishText })
-            .then((exResp: ExtensionResponse) => {
-              if (!popup) return;
-              if (exResp.ok && "exampleSentence" in exResp) {
-                const r = exResp as { exampleSentence: string; exampleSentenceIrish?: string; pronunciation?: string; wordType?: string };
-                popup.updateInsights({
-                  sentence: r.exampleSentence,
-                  irish: r.exampleSentenceIrish ?? "",
-                  pronunciation: r.pronunciation,
-                  wordType: r.wordType,
-                });
-              }
-            })
-            .catch(() => { /* silently ignore */ });
-        }
       } else {
         const errMsg = resp.ok ? "Unexpected response" : (resp as { error: string }).error;
         popup.showError(errMsg, { onSave: async () => {}, onClose: dismissPopup, onTranslateWord: () => {}, onSpeak: async () => {} });
