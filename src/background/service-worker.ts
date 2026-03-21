@@ -104,6 +104,9 @@ async function handleMessage(
       return { ok: true };
     }
 
+    case "SPEAK_WORD":
+      return handleSpeakWord(request.text, request.langCode);
+
     default:
       return { ok: false, error: "Unknown message type", code: "UNKNOWN" };
   }
@@ -146,9 +149,7 @@ async function handleTranslate(rawText: string, context?: string): Promise<Exten
     };
   }
 
-  const provider = createProvider(settings.apiKey);
-
-  // 3. Translate standalone text + context sentence (in parallel)
+  const provider = createProvider(settings.apiKey, settings.elevenLabsApiKey);
   const contextPromise = context && isWord
     ? translateContextSentence(context, text, TARGET_LANG)
     : Promise.resolve(null);
@@ -178,7 +179,7 @@ async function translateContextSentence(
 ): Promise<string | null> {
   const settings = await getSettings();
   if (!settings.apiKey) return null;
-  const provider = createProvider(settings.apiKey);
+  const provider = createProvider(settings.apiKey, settings.elevenLabsApiKey);
   try {
     return await provider.translateRaw(context.slice(0, MAX_CONTEXT_LENGTH), targetLang);
   } catch {
@@ -202,20 +203,35 @@ async function handleGetExample(
     return { ok: false, error: "No API key", code: "NO_API_KEY" };
   }
 
-  const provider = createProvider(settings.apiKey);
-  const example = await provider.generateExample(sourceText, irishText);
+  const provider = createProvider(settings.apiKey, settings.elevenLabsApiKey);
+  const insights = await provider.generateWordInsights(sourceText, irishText);
 
-  if (!example) {
-    return { ok: false, error: "Could not generate example", code: "UNKNOWN" };
+  if (!insights) {
+    return { ok: false, error: "Could not generate insights", code: "UNKNOWN" };
   }
 
   return {
     ok: true,
-    exampleSentence: example.english,
-    exampleSentenceIrish: example.irish,
+    exampleSentence: insights.english,
+    exampleSentenceIrish: insights.irish,
+    pronunciation: insights.pronunciation,
+    wordType: insights.wordType,
   };
 }
+// ── TTS logic ──────────────────────────────────────────────────────────────────────
 
+async function handleSpeakWord(
+  text: string,
+  langCode: string
+): Promise<ExtensionResponse> {
+  const settings = await getSettings();
+  if (!settings.elevenLabsApiKey) {
+    return { ok: false, error: "No ElevenLabs API key configured. Open extension settings to add your key.", code: "NO_API_KEY" };
+  }
+  const provider = createProvider(settings.apiKey, settings.elevenLabsApiKey);
+  const audioContent = await provider.synthesizeSpeech(text, langCode);
+  return { ok: true, audioContent };
+}
 // ── Save word logic ───────────────────────────────────────────────────────────
 
 async function handleSaveWord(

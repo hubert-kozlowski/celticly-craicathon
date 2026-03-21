@@ -60,6 +60,28 @@ async function init(): Promise<void> {
     await sendMsg({ type: "SAVE_SETTINGS", settings: { enabled: toggle.checked } });
   });
 
+  // Test yourself
+  const testWordCount = document.getElementById("test-word-count") as HTMLInputElement;
+  const testCountLabel = document.getElementById("test-count-label")!;
+  const testStartBtn = document.getElementById("test-start-btn")!;
+
+  testWordCount.addEventListener("input", () => {
+    testCountLabel.textContent = testWordCount.value;
+  });
+
+  testStartBtn.addEventListener("click", async () => {
+    const wordCount = parseInt(testWordCount.value, 10);
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab?.id != null) {
+        chrome.tabs.sendMessage(tab.id, { type: "START_TEST", wordCount });
+      }
+    } catch {
+      // Silently ignore if the content script isn't injected on this page
+    }
+    window.close();
+  });
+
   // Load word bank stats
   const wordsResp = await sendMsg({ type: "GET_SAVED_WORDS" });
   if (wordsResp.ok && "words" in wordsResp) {

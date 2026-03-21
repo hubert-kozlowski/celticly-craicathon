@@ -1,11 +1,11 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Cúpla Focal – Options</title>
+    <title>Celticly &#8211; Settings</title>
     <style>
-      /* ── Theme tokens ── */
+      /* â”€â”€ Theme tokens â”€â”€ */
       :root {
         --bg:           #F7F7F8;
         --bg-card:      #FFFFFF;
@@ -67,11 +67,7 @@
         gap: 16px;
       }
 
-      .page-title {
-        font-size: 22px; font-weight: 700;
-        color: var(--accent); letter-spacing: -0.3px;
-        margin-bottom: 2px;
-      }
+      .page-logo { height: 42px; width: auto; display: block; margin-bottom: 4px; }
       .page-sub { font-size: 13px; color: var(--text-muted); }
 
       /* Cards */
@@ -220,8 +216,8 @@
   <body>
     <div class="page-header">
       <div>
-        <h1 class="page-title">Cúpla Focal</h1>
-        <p class="page-sub">Settings &amp; Word Bank — Irish Translation Extension</p>
+        <img src="media/celticlysub.png" class="page-logo" alt="Celticly" />
+        <p class="page-sub">Settings &amp; Word Bank</p>
       </div>
     </div>
 
@@ -230,12 +226,21 @@
       <div class="card-title">Translation API</div>
       <div class="field">
         <label for="api-key">Google Cloud Translation API Key</label>
-        <input type="password" id="api-key" placeholder="Paste your key here…" autocomplete="off" />
+        <input type="password" id="api-key" placeholder="Paste your key here..." autocomplete="off" />
         <p class="field-hint">
           Get a free key from the
           <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a>
-          (APIs &amp; Services → Credentials → Create API key, then enable the Cloud Translation API).
+          (APIs &amp; Services &rarr; Credentials &rarr; Create API key, then enable the Cloud Translation API).
           Free tier: 500,000 characters/month. Enabling the <strong>Generative Language API</strong> also unlocks daily example sentences.
+        </p>
+      </div>
+      <div class="field">
+        <label for="elevenlabs-api-key">ElevenLabs API Key (Pronunciation)</label>
+        <input type="password" id="elevenlabs-api-key" placeholder="Paste your ElevenLabs key here..." autocomplete="off" />
+        <p class="field-hint">
+          Used for the &#x1F50A; pronunciation button. Get a free key from the
+          <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener noreferrer">ElevenLabs dashboard</a>.
+          Free tier: 10,000 characters/month.
         </p>
       </div>
     </div>
@@ -305,407 +310,7 @@
             </tr>
           </thead>
           <tbody id="wb-tbody">
-            <tr><td colspan="4" class="empty-wb">Loading…</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <script src="dist/options.js"></script>
-  </body>
-</html>
-    <style>
-      * {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
-
-      body {
-        max-width: 660px;
-        margin: 0 auto;
-        padding: 32px 24px;
-        background: #12111d;
-        color: #e0e0e0;
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        font-size: 14px;
-        line-height: 1.6;
-      }
-
-      .page-title {
-        font-size: 22px;
-        font-weight: 700;
-        color: #16c784;
-        margin-bottom: 4px;
-      }
-
-      .page-sub {
-        font-size: 13px;
-        color: #777;
-        margin-bottom: 32px;
-      }
-
-      .card {
-        background: #1a1a2e;
-        border-radius: 12px;
-        padding: 20px 24px;
-        margin-bottom: 20px;
-        border: 1px solid rgba(255, 255, 255, 0.07);
-      }
-
-      .card-title {
-        font-size: 13px;
-        font-weight: 600;
-        color: #16c784;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        margin-bottom: 16px;
-      }
-
-      .field {
-        margin-bottom: 16px;
-      }
-
-      .field:last-child {
-        margin-bottom: 0;
-      }
-
-      label {
-        display: block;
-        font-size: 13px;
-        font-weight: 500;
-        color: #ccc;
-        margin-bottom: 5px;
-      }
-
-      .field-hint {
-        font-size: 11px;
-        color: #666;
-        margin-top: 4px;
-      }
-
-      .field-hint a {
-        color: #7eb8f4;
-      }
-
-      input[type="text"],
-      input[type="password"],
-      input[type="number"],
-      select {
-        width: 100%;
-        padding: 8px 12px;
-        background: #0e0e1a;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 7px;
-        color: #e0e0e0;
-        font-size: 13px;
-        outline: none;
-        transition: border-color 0.15s;
-      }
-
-      input:focus,
-      select:focus {
-        border-color: #16c784;
-      }
-
-      input[type="number"] {
-        max-width: 120px;
-      }
-
-      .toggle-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-      }
-
-      .toggle-text {
-        flex: 1;
-      }
-
-      .toggle {
-        position: relative;
-        width: 40px;
-        height: 22px;
-        flex-shrink: 0;
-        margin-left: 12px;
-      }
-
-      .toggle input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-      }
-
-      .toggle-slider {
-        position: absolute;
-        inset: 0;
-        background: #333;
-        border-radius: 22px;
-        cursor: pointer;
-        transition: background 0.2s;
-      }
-
-      .toggle-slider:before {
-        content: "";
-        position: absolute;
-        width: 16px;
-        height: 16px;
-        background: #fff;
-        border-radius: 50%;
-        top: 3px;
-        left: 3px;
-        transition: transform 0.2s;
-      }
-
-      input:checked + .toggle-slider {
-        background: #16c784;
-      }
-      input:checked + .toggle-slider:before {
-        transform: translateX(18px);
-      }
-
-      .btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        padding: 8px 16px;
-        border-radius: 7px;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-        border: none;
-        transition: background 0.15s;
-      }
-
-      .btn-primary {
-        background: #16c784;
-        color: #0a0a16;
-      }
-      .btn-primary:hover {
-        background: #12b070;
-      }
-      .btn-danger {
-        background: rgba(255, 80, 80, 0.15);
-        color: #ff8080;
-      }
-      .btn-danger:hover {
-        background: rgba(255, 80, 80, 0.25);
-      }
-      .btn-secondary {
-        background: rgba(255, 255, 255, 0.08);
-        color: #ccc;
-      }
-      .btn-secondary:hover {
-        background: rgba(255, 255, 255, 0.14);
-      }
-
-      .actions-row {
-        display: flex;
-        gap: 10px;
-        margin-top: 4px;
-        flex-wrap: wrap;
-      }
-
-      #save-status {
-        font-size: 13px;
-        color: #16c784;
-        font-weight: 600;
-        min-height: 20px;
-        margin-top: 12px;
-      }
-
-      /* Word bank table */
-      .wb-toolbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 12px;
-      }
-
-      .wb-count {
-        font-size: 12px;
-        color: #777;
-      }
-
-      .wb-table-wrap {
-        overflow-x: auto;
-        border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.07);
-      }
-
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 13px;
-      }
-
-      thead th {
-        background: rgba(255, 255, 255, 0.04);
-        padding: 8px 12px;
-        text-align: left;
-        font-weight: 600;
-        color: #888;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-        white-space: nowrap;
-      }
-
-      tbody tr {
-        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-        transition: background 0.1s;
-      }
-
-      tbody tr:last-child {
-        border-bottom: none;
-      }
-      tbody tr:hover {
-        background: rgba(255, 255, 255, 0.03);
-      }
-
-      tbody td {
-        padding: 8px 12px;
-        vertical-align: middle;
-        max-width: 200px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .td-actions {
-        text-align: right;
-        width: 50px;
-      }
-
-      .delete-btn {
-        background: none;
-        border: none;
-        cursor: pointer;
-        color: #555;
-        font-size: 15px;
-        border-radius: 4px;
-        padding: 2px 5px;
-        transition:
-          color 0.1s,
-          background 0.1s;
-      }
-
-      .delete-btn:hover {
-        color: #ff8080;
-        background: rgba(255, 80, 80, 0.1);
-      }
-
-      .empty-wb {
-        padding: 24px;
-        text-align: center;
-        color: #555;
-        font-size: 13px;
-      }
-    </style>
-  </head>
-  <body>
-    <h1 class="page-title">Cúpla Focal</h1>
-    <p class="page-sub">
-      Settings &amp; Word Bank — Irish Translation Extension
-    </p>
-
-    <!-- API Settings -->
-    <div class="card">
-      <div class="card-title">Translation API</div>
-
-      <div class="field">
-        <label for="api-key">Google Cloud Translation API Key</label>
-        <input
-          type="password"
-          id="api-key"
-          placeholder="Paste your key here…"
-          autocomplete="off"
-        />
-        <p class="field-hint">
-          Get a free key from the
-          <a
-            href="https://console.cloud.google.com/apis/credentials"
-            target="_blank"
-            rel="noopener noreferrer"
-            >Google Cloud Console</a
-          >
-          (APIs &amp; Services → Credentials → Create API key, then enable the
-          Cloud Translation API). The free tier covers 500,000 characters/month.
-        </p>
-      </div>
-    </div>
-
-    <!-- Behaviour -->
-    <div class="card">
-      <div class="card-title">Behaviour</div>
-
-      <div class="field">
-        <div class="toggle-row">
-          <div class="toggle-text">
-            <label>Enable translation on all pages</label>
-            <p class="field-hint">
-              When off, the popup will not appear and no translations are
-              requested.
-            </p>
-          </div>
-          <label class="toggle">
-            <input type="checkbox" id="enabled" checked />
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-      </div>
-
-      <div class="field">
-        <label for="auto-dismiss">Auto-dismiss popup after (ms)</label>
-        <input
-          type="number"
-          id="auto-dismiss"
-          min="0"
-          max="60000"
-          step="500"
-          value="8000"
-        />
-        <p class="field-hint">
-          Set to 0 to keep the popup open until you dismiss it manually.
-        </p>
-      </div>
-    </div>
-
-    <div class="actions-row">
-      <button class="btn btn-primary" id="save-btn">Save Settings</button>
-      <button class="btn btn-secondary" id="clear-cache-btn">
-        Clear Translation Cache
-      </button>
-    </div>
-    <div id="save-status"></div>
-
-    <!-- Word Bank -->
-    <div class="card" style="margin-top: 32px">
-      <div class="card-title">Word Bank</div>
-      <div class="wb-toolbar">
-        <span class="wb-count" id="wb-count"></span>
-        <div style="display: flex; gap: 8px">
-          <button class="btn btn-secondary" id="export-btn">Export CSV</button>
-          <button class="btn btn-danger" id="clear-wb-btn">Clear All</button>
-        </div>
-      </div>
-      <div class="wb-table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>English</th>
-              <th>Irish</th>
-              <th>Saved</th>
-              <th class="td-actions"></th>
-            </tr>
-          </thead>
-          <tbody id="wb-tbody">
-            <tr>
-              <td colspan="4" class="empty-wb">Loading…</td>
-            </tr>
+            <tr><td colspan="4" class="empty-wb">Loadingâ€¦</td></tr>
           </tbody>
         </table>
       </div>

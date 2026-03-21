@@ -1,7 +1,7 @@
 {
-  "name": "cupla-focal",
+  "name": "celticly",
   "version": "1.0.0",
-  "description": "Cúpla Focal – Irish translation Chrome extension",
+  "description": "Celticly – Irish translation Chrome extension",
   "private": true,
   "scripts": {
     "build": "webpack --mode production",

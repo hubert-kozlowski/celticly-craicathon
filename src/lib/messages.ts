@@ -46,6 +46,12 @@ export interface GetExampleRequest {
   irishText: string;
 }
 
+export interface SpeakWordRequest {
+  type: "SPEAK_WORD";
+  text: string;
+  langCode: string;
+}
+
 export type ExtensionRequest =
   | TranslateRequest
   | SaveWordRequest
@@ -54,7 +60,8 @@ export type ExtensionRequest =
   | GetSettingsRequest
   | SaveSettingsRequest
   | ClearCacheRequest
-  | GetExampleRequest;
+  | GetExampleRequest
+  | SpeakWordRequest;
 
 // ── Inbound: service worker → content script ───────────────────────────────
 
@@ -94,6 +101,13 @@ export interface GetExampleResponse {
   ok: true;
   exampleSentence: string;
   exampleSentenceIrish: string;
+  pronunciation?: string;
+  wordType?: string;
+}
+
+export interface SpeakWordResponse {
+  ok: true;
+  audioContent: string; // base64-encoded MP3
 }
 
 export interface ErrorResponse {
@@ -111,4 +125,5 @@ export type ExtensionResponse =
   | SaveSettingsResponse
   | ClearCacheResponse
   | GetExampleResponse
+  | SpeakWordResponse
   | ErrorResponse;

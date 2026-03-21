@@ -30,6 +30,7 @@ function applyTheme(theme: "light" | "dark" | "auto"): void {
 
 // DOM refs
 const apiKeyInput = document.getElementById("api-key") as HTMLInputElement;
+const elevenLabsApiKeyInput = document.getElementById("elevenlabs-api-key") as HTMLInputElement;
 const enabledToggle = document.getElementById("enabled") as HTMLInputElement;
 const autoDismissInput = document.getElementById("auto-dismiss") as HTMLInputElement;
 const themeSelect = document.getElementById("theme") as HTMLSelectElement;
@@ -48,6 +49,7 @@ async function loadSettings(): Promise<void> {
   if (resp.ok && "settings" in resp) {
     const s = resp.settings as ExtensionSettings;
     apiKeyInput.value = s.apiKey;
+    elevenLabsApiKeyInput.value = s.elevenLabsApiKey ?? "";
     enabledToggle.checked = s.enabled;
     autoDismissInput.value = String(s.popupAutoDismissMs);
     themeSelect.value = s.theme ?? "light";
@@ -79,7 +81,7 @@ function renderWords(): void {
         <td title="${escapeHtml(w.irishText)}">${escapeHtml(w.irishText)}</td>
         <td>${escapeHtml(formatDate(w.savedAt))}</td>
         <td class="td-actions">
-          <button class="delete-btn" data-id="${escapeHtml(w.id)}" title="Delete">âœ•</button>
+          <button class="delete-btn" data-id="${escapeHtml(w.id)}" title="Delete">&#215;</button>
         </td>
       </tr>`
     )
@@ -103,18 +105,19 @@ themeSelect.addEventListener("change", () => {
 saveBtn.addEventListener("click", async () => {
   const settings: Partial<ExtensionSettings> = {
     apiKey: apiKeyInput.value.trim(),
+    elevenLabsApiKey: elevenLabsApiKeyInput.value.trim(),
     enabled: enabledToggle.checked,
     popupAutoDismissMs: Math.max(0, parseInt(autoDismissInput.value, 10) || 0),
     theme: themeSelect.value as "light" | "dark" | "auto",
   };
   await sendMsg({ type: "SAVE_SETTINGS", settings });
-  saveStatus.textContent = "âœ“ Settings saved!";
+  saveStatus.textContent = "\u2713 Settings saved!";
   setTimeout(() => { saveStatus.textContent = ""; }, 3000);
 });
 
 clearCacheBtn.addEventListener("click", async () => {
   await sendMsg({ type: "CLEAR_CACHE" });
-  saveStatus.textContent = "âœ“ Translation cache cleared.";
+  saveStatus.textContent = "\u2713 Translation cache cleared.";
   setTimeout(() => { saveStatus.textContent = ""; }, 3000);
 });
 
@@ -140,7 +143,7 @@ exportBtn.addEventListener("click", () => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `cupla-focal-wordbank-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `celticly-wordbank-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 });

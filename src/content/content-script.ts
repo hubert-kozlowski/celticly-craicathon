@@ -4,6 +4,7 @@
 
 import type { ExtensionResponse, ExtensionRequest } from "../lib/messages";
 import { TranslationPopup } from "./popup-ui";
+import { startTestMode, stopTestMode } from "./test-mode";
 
 const SELECTION_DEBOUNCE_MS = 350;
 const MAX_TEXT_LENGTH = 500;
@@ -37,7 +38,7 @@ async function init(): Promise<void> {
 
 function onMouseUp(e: MouseEvent): void {
   const target = e.target as HTMLElement;
-  if (target.id === "cupla-focal-popup-host") return;
+  if (target.id === "celticly-popup-host") return;
 
   if (debounceTimer !== null) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => evaluateSelection(e.clientX, e.clientY), SELECTION_DEBOUNCE_MS);
@@ -48,10 +49,18 @@ function onKeyDown(e: KeyboardEvent): void {
 }
 
 function onRuntimeMessage(
-  message: { type: string; text?: string },
+  message: { type: string; text?: string; wordCount?: number },
   _sender: chrome.runtime.MessageSender,
   _sendResponse: (r: unknown) => void
 ): void {
+  if (message.type === "START_TEST" && typeof message.wordCount === "number") {
+    startTestMode(message.wordCount, sendMessage).catch(console.error);
+    return;
+  }
+  if (message.type === "STOP_TEST") {
+    stopTestMode();
+    return;
+  }
   if (message.type === "TRANSLATE_SELECTION" && message.text) {
     const sel = window.getSelection();
     let x = window.innerWidth / 2;
@@ -161,6 +170,16 @@ function triggerTranslation(text: string, x: number, y: number, context?: string
           onTranslateWord: (word: string) => {
             triggerTranslation(word, x, y);
           },
+          onSpeak: async (irishText: string) => {
+            // Strip anything that isn't an English/Irish letter, space, or hyphen
+            const cleanText = irishText.replace(/[^a-zA-Z\u00e1\u00e9\u00ed\u00f3\u00fa\u00c1\u00c9\u00cd\u00d3\u00da\s-]/g, '').trim();
+            if (!cleanText) return;
+            const resp = await sendMessage({ type: "SPEAK_WORD", text: cleanText, langCode: "ga-IE" });
+            if (resp.ok && "audioContent" in resp) {
+              const audio = new Audio(`data:audio/mp3;base64,${(resp as { audioContent: string }).audioContent}`);
+              audio.play().catch(() => { /* autoplay policy – silently ignore */ });
+            }
+          },
         });
 
         // For single words, asynchronously fetch a daily-life example sentence
@@ -169,9 +188,12 @@ function triggerTranslation(text: string, x: number, y: number, context?: string
             .then((exResp: ExtensionResponse) => {
               if (!popup) return;
               if (exResp.ok && "exampleSentence" in exResp) {
-                popup.updateExample({
-                  sentence: exResp.exampleSentence,
-                  irish: exResp.exampleSentenceIrish,
+                const r = exResp as { exampleSentence: string; exampleSentenceIrish?: string; pronunciation?: string; wordType?: string };
+                popup.updateInsights({
+                  sentence: r.exampleSentence,
+                  irish: r.exampleSentenceIrish ?? "",
+                  pronunciation: r.pronunciation,
+                  wordType: r.wordType,
                 });
               }
             })
@@ -179,13 +201,13 @@ function triggerTranslation(text: string, x: number, y: number, context?: string
         }
       } else {
         const errMsg = resp.ok ? "Unexpected response" : (resp as { error: string }).error;
-        popup.showError(errMsg, { onSave: async () => {}, onClose: dismissPopup, onTranslateWord: () => {} });
+        popup.showError(errMsg, { onSave: async () => {}, onClose: dismissPopup, onTranslateWord: () => {}, onSpeak: async () => {} });
       }
     })
     .catch((err: unknown) => {
       if (!popup) return;
       const msg = err instanceof Error ? err.message : String(err);
-      popup.showError(msg, { onSave: async () => {}, onClose: dismissPopup, onTranslateWord: () => {} });
+      popup.showError(msg, { onSave: async () => {}, onClose: dismissPopup, onTranslateWord: () => {}, onSpeak: async () => {} });
     });
 }
 

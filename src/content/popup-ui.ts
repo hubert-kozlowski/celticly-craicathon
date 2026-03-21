@@ -1,10 +1,10 @@
-// â”€â”€â”€ On-page translation popup (Shadow DOM isolated) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+﻿// â”€â”€â”€ On-page translation popup (Shadow DOM isolated) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Renders near the selection, handles all translation states, save action.
 // Light theme by default (Apple / Grammarly-inspired), with a dark variant.
 
 import type { TranslationResult } from "../lib/types";
 
-const POPUP_ID = "cupla-focal-popup-host";
+const POPUP_ID = "celticly-popup-host";
 
 const POPUP_STYLES = `
   :host { all: initial; }
@@ -226,7 +226,7 @@ const POPUP_STYLES = `
   .cf-chip:active { transform: scale(0.95); }
 
   /* â”€â”€ Example sentence â”€â”€ */
-  .cf-example, .cf-example-pending {
+  .cf-insights {
     margin-top: 10px;
     padding: 8px 10px;
     background: var(--example-bg);
@@ -234,6 +234,30 @@ const POPUP_STYLES = `
     border-radius: 8px;
     font-size: 12px;
     line-height: 1.5;
+  }
+
+  .cf-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+
+  .cf-pron {
+    font-style: italic;
+    color: var(--text-muted);
+  }
+
+  .cf-meta-sep { color: var(--text-light); }
+
+  .cf-word-type-badge {
+    background: var(--accent-subtle);
+    color: var(--accent-subtle-text);
+    border-radius: 20px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 600;
   }
 
   .cf-example-label {
@@ -253,14 +277,6 @@ const POPUP_STYLES = `
   .cf-example-ga {
     color: var(--example-text);
     font-weight: 500;
-  }
-
-  .cf-example-pending {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    color: var(--text-light);
-    font-size: 12px;
   }
 
   /* â”€â”€ Loading â”€â”€ */
@@ -327,6 +343,36 @@ const POPUP_STYLES = `
     box-shadow: none;
   }
 
+  .cf-irish-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+  .cf-irish-row .cf-irish { margin-bottom: 0; }
+
+  .cf-speak-btn {
+    background: var(--chip-bg);
+    border: 1px solid var(--border);
+    padding: 4px 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    border-radius: 6px;
+    transition: color 0.15s, background 0.15s, border-color 0.15s, transform 0.08s;
+    flex-shrink: 0;
+    line-height: 0;
+  }
+  .cf-speak-btn:hover {
+    color: var(--accent);
+    background: var(--accent-subtle);
+    border-color: var(--accent);
+  }
+  .cf-speak-btn:active { transform: scale(0.93); }
+  .cf-speak-btn:disabled { cursor: default; opacity: 0.45; }
+
   .cf-no-save {
     font-size: 11px;
     color: var(--text-light);
@@ -360,6 +406,7 @@ export interface PopupCallbacks {
   onSave: (sourceText: string, irishText: string) => Promise<void>;
   onClose: () => void;
   onTranslateWord: (word: string) => void;
+  onSpeak: (irishText: string) => Promise<void>;
 }
 
 export class TranslationPopup {
@@ -396,17 +443,20 @@ export class TranslationPopup {
     this.scheduleAutoDismiss(callbacks.onClose);
   }
 
-  /** Called asynchronously after showResult to inject the example sentence. */
-  updateExample(example: { sentence: string; irish: string }): void {
+  /** Called asynchronously after showResult to inject word insights. */
+  updateInsights(data: { sentence: string; irish: string; pronunciation?: string; wordType?: string }): void {
     if (!this.popupEl) return;
-    const pending = this.popupEl.querySelector(".cf-example-pending");
-    if (!pending) return;
+    const slot = this.popupEl.querySelector(".cf-insights-slot");
+    if (!slot) return;
+    slot.outerHTML = this.buildInsightsHtml(data.pronunciation ?? "", data.wordType ?? "", data.sentence, data.irish);
+  }
 
-    pending.className = "cf-example";
-    pending.innerHTML = `
-      <div class="cf-example-label">ðŸ’¡ Try using it</div>
-      <div class="cf-example-en">${escapeHtml(example.sentence)}</div>
-      <div class="cf-example-ga">${escapeHtml(example.irish)}</div>`;
+  private buildInsightsHtml(pronunciation: string, wordType: string, exEn: string, exIrish: string): string {
+    const pronHtml = pronunciation ? `<span class="cf-pron">/${escapeHtml(pronunciation)}/</span>` : "";
+    const sepHtml = pronunciation && wordType ? `<span class="cf-meta-sep">&#183;</span>` : "";
+    const typeHtml = wordType ? `<span class="cf-word-type-badge">${escapeHtml(wordType)}</span>` : "";
+    const metaHtml = (pronunciation || wordType) ? `<div class="cf-meta">${pronHtml}${sepHtml}${typeHtml}</div>` : "";
+    return `<div class="cf-insights">${metaHtml}<div class="cf-example-label">&#x1F4A1; Try using it</div><div class="cf-example-en">${escapeHtml(exEn)}</div><div class="cf-example-ga">${escapeHtml(exIrish)}</div></div>`;
   }
 
   dismiss(): void {
@@ -508,12 +558,12 @@ export class TranslationPopup {
     if (!this.popupEl) return;
     this.popupEl.innerHTML = `
       <div class="cf-header">
-        <span class="cf-brand">CÃºpla Focal</span>
+        <span class="cf-brand">Celticly</span>
       </div>
       <div class="cf-body">
         <div class="cf-loading">
           <div class="cf-spinner"></div>
-          <span>Translating to Irishâ€¦</span>
+          <span>Translating to Irish...</span>
         </div>
       </div>`;
   }
@@ -546,51 +596,53 @@ export class TranslationPopup {
       ? this.buildWordChips(result.sourceText)
       : "";
 
-    // Example sentence section (single word only)
-    let exampleHtml = "";
+    // Insights section (pronunciation, word type, example) for single words only
+    let insightsHtml = "";
     if (isWord) {
       if (result.exampleSentence) {
-        exampleHtml = `
-          <div class="cf-example">
-            <div class="cf-example-label">ðŸ’¡ Try using it</div>
-            <div class="cf-example-en">${escapeHtml(result.exampleSentence)}</div>
-            <div class="cf-example-ga">${escapeHtml(result.exampleSentenceIrish ?? "")}</div>
-          </div>`;
+        insightsHtml = this.buildInsightsHtml(
+          result.pronunciation ?? "",
+          result.wordType ?? "",
+          result.exampleSentence,
+          result.exampleSentenceIrish ?? ""
+        );
       } else {
-        // Placeholder â€“ updated later by updateExample()
-        exampleHtml = `
-          <div class="cf-example-pending">
-            <div class="cf-spinner" style="width:12px;height:12px;border-width:1.5px;"></div>
-            <span>Loading exampleâ€¦</span>
-          </div>`;
+        // Empty slot filled asynchronously — no spinner
+        insightsHtml = `<div class="cf-insights-slot"></div>`;
       }
     }
 
     const truncatedNote = truncated
-      ? `<div class="cf-truncated-note">âš  Only the first 500 characters were translated.</div>`
+      ? `<div class="cf-truncated-note">&#x26A0; Only the first 500 characters were translated.</div>`
       : "";
 
     const cachedNote = result.fromCache
       ? `<div class="cf-footer">Cached result</div>`
       : "";
 
-    // Save button â€“ disabled for phrases/sentences
+    // Save button -- disabled for phrases/sentences
     const saveAreaHtml = isWord
-      ? `<button class="cf-save-btn"><span>ï¼‹</span> Save to Word Bank</button>`
+      ? `<button class="cf-save-btn"><span>+</span> Save to Word Bank</button>`
       : `<span class="cf-no-save">Select a single word to save to Word Bank</span>`;
-
+    const speakSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
+    const speakHtml = isWord
+      ? `<button class="cf-speak-btn" title="Hear Irish pronunciation">${speakSvg}</button>`
+      : "";
     this.popupEl.innerHTML = `
       <div class="cf-header">
-        <span class="cf-brand">CÃºpla Focal</span>
-        <button class="cf-close" title="Close">âœ•</button>
+        <span class="cf-brand">Celticly</span>
+        <button class="cf-close" title="Close">&#215;</button>
       </div>
       <div class="cf-body">
         <div class="cf-source">${sourceEscaped}</div>
-        <div class="cf-irish">${irishEscaped}</div>
+        <div class="cf-irish-row">
+          <div class="cf-irish">${irishEscaped}</div>
+          ${speakHtml}
+        </div>
         ${phoneticHtml}
         ${contextHtml}
         ${wordChipsHtml}
-        ${exampleHtml}
+        ${insightsHtml}
         ${truncatedNote}
       </div>
       <div class="cf-actions">${saveAreaHtml}</div>
@@ -605,16 +657,16 @@ export class TranslationPopup {
       saveBtn?.addEventListener("click", async () => {
         if (!saveBtn) return;
         saveBtn.disabled = true;
-        saveBtn.innerHTML = `<div class="cf-spinner" style="width:11px;height:11px;border-width:2px;"></div> Savingâ€¦`;
+        saveBtn.innerHTML = `<div class="cf-spinner" style="width:11px;height:11px;border-width:2px;"></div> Saving...`;
         try {
           await callbacks.onSave(result.sourceText, result.irishText);
           if (this.popupEl) {
             const actionsEl = this.popupEl.querySelector(".cf-actions");
-            if (actionsEl) actionsEl.innerHTML = `<span class="cf-saved-ok">âœ“ Saved to Word Bank!</span>`;
+            if (actionsEl) actionsEl.innerHTML = `<span class="cf-saved-ok">&#x2713; Saved to Word Bank!</span>`;
           }
         } catch {
           saveBtn.disabled = false;
-          saveBtn.innerHTML = `<span>ï¼‹</span> Save to Word Bank`;
+          saveBtn.innerHTML = `<span>+</span> Save to Word Bank`;
         }
       });
     }
@@ -626,6 +678,25 @@ export class TranslationPopup {
         if (word) callbacks.onTranslateWord(word);
       });
     });
+
+    // Speak button (single words)
+    if (isWord) {
+      const speakBtn = this.popupEl.querySelector<HTMLButtonElement>(".cf-speak-btn");
+      speakBtn?.addEventListener("click", async () => {
+        if (!speakBtn) return;
+        const origContent = speakBtn.innerHTML;
+        speakBtn.disabled = true;
+        speakBtn.innerHTML = `<div class="cf-spinner" style="width:12px;height:12px;border-width:1.5px;"></div>`;
+        try {
+          await callbacks.onSpeak(result.irishText);
+        } catch {
+          // silently ignore; button restores regardless
+        } finally {
+          speakBtn.disabled = false;
+          speakBtn.innerHTML = origContent;
+        }
+      });
+    }
   }
 
   private buildWordChips(text: string): string {
@@ -659,11 +730,11 @@ export class TranslationPopup {
 
     this.popupEl.innerHTML = `
       <div class="cf-header">
-        <span class="cf-brand">CÃºpla Focal</span>
-        <button class="cf-close" title="Close">âœ•</button>
+        <span class="cf-brand">Celticly</span>
+        <button class="cf-close" title="Close">&#215;</button>
       </div>
       <div class="cf-body">
-        <div class="cf-error">âš  ${displayMsg}</div>
+        <div class="cf-error">&#x26A0; ${displayMsg}</div>
       </div>`;
 
     this.popupEl.querySelector(".cf-close")?.addEventListener("click", onClose);

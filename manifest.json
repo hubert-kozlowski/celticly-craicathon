@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Cúpla Focal – Irish Translation",
-  "short_name": "Cúpla Focal",
-  "description": "Select any text on the web for an instant Irish translation. Save words to your personal word bank.",
+  "name": "Celticly – Irish Translation",
+  "short_name": "Celticly",
+  "description": "Select any text on a webpage for an instant Irish translation. Build your personal word bank with Celticly.",
   "version": "1.0.0",
   "icons": {
     "16": "icons/icon16.png",
@@ -29,7 +29,7 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     },
-    "default_title": "Cúpla Focal"
+    "default_title": "Celticly"
   },
   "options_page": "options.html",
   "permissions": [
@@ -39,7 +39,7 @@
   "host_permissions": ["<all_urls>"],
   "web_accessible_resources": [
     {
-      "resources": ["icons/*"],
+      "resources": ["icons/*", "media/*"],
       "matches": ["<all_urls>"]
     }
   ]

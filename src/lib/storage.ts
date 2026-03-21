@@ -31,7 +31,7 @@ export async function saveSettings(
 
 // ── IndexedDB bootstrap ───────────────────────────────────────────────────────
 
-const DB_NAME = "cupla_focal";
+const DB_NAME = "celticly";
 const DB_VERSION = 1;
 const STORE_WORDS = "words";
 const STORE_CACHE = "translation_cache";
