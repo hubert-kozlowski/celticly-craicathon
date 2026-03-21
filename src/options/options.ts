@@ -1,4 +1,4 @@
-// ─── Options page script ──────────────────────────────────────────────────────
+// â”€â”€â”€ Options page script â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 import type { ExtensionResponse } from "../lib/messages";
 import type { SavedWord, ExtensionSettings } from "../lib/types";
@@ -20,11 +20,19 @@ function formatDate(ms: number): string {
   return new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
 
+function applyTheme(theme: "light" | "dark" | "auto"): void {
+  const resolved =
+    theme === "auto"
+      ? window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+      : theme;
+  document.documentElement.setAttribute("data-theme", resolved);
+}
+
 // DOM refs
 const apiKeyInput = document.getElementById("api-key") as HTMLInputElement;
-const apiRegionInput = document.getElementById("api-region") as HTMLInputElement;
 const enabledToggle = document.getElementById("enabled") as HTMLInputElement;
 const autoDismissInput = document.getElementById("auto-dismiss") as HTMLInputElement;
+const themeSelect = document.getElementById("theme") as HTMLSelectElement;
 const saveBtn = document.getElementById("save-btn") as HTMLButtonElement;
 const clearCacheBtn = document.getElementById("clear-cache-btn") as HTMLButtonElement;
 const saveStatus = document.getElementById("save-status")!;
@@ -40,9 +48,10 @@ async function loadSettings(): Promise<void> {
   if (resp.ok && "settings" in resp) {
     const s = resp.settings as ExtensionSettings;
     apiKeyInput.value = s.apiKey;
-    apiRegionInput.value = s.apiRegion;
     enabledToggle.checked = s.enabled;
     autoDismissInput.value = String(s.popupAutoDismissMs);
+    themeSelect.value = s.theme ?? "light";
+    applyTheme(s.theme ?? "light");
   }
 }
 
@@ -70,13 +79,12 @@ function renderWords(): void {
         <td title="${escapeHtml(w.irishText)}">${escapeHtml(w.irishText)}</td>
         <td>${escapeHtml(formatDate(w.savedAt))}</td>
         <td class="td-actions">
-          <button class="delete-btn" data-id="${escapeHtml(w.id)}" title="Delete">✕</button>
+          <button class="delete-btn" data-id="${escapeHtml(w.id)}" title="Delete">âœ•</button>
         </td>
       </tr>`
     )
     .join("");
 
-  // Delegate delete clicks
   wbTbody.querySelectorAll(".delete-btn").forEach((btn) =>
     btn.addEventListener("click", async () => {
       const id = (btn as HTMLElement).dataset.id ?? "";
@@ -87,21 +95,26 @@ function renderWords(): void {
   );
 }
 
+// Live preview theme change
+themeSelect.addEventListener("change", () => {
+  applyTheme(themeSelect.value as "light" | "dark" | "auto");
+});
+
 saveBtn.addEventListener("click", async () => {
   const settings: Partial<ExtensionSettings> = {
     apiKey: apiKeyInput.value.trim(),
-    apiRegion: apiRegionInput.value.trim() || "westeurope",
     enabled: enabledToggle.checked,
     popupAutoDismissMs: Math.max(0, parseInt(autoDismissInput.value, 10) || 0),
+    theme: themeSelect.value as "light" | "dark" | "auto",
   };
   await sendMsg({ type: "SAVE_SETTINGS", settings });
-  saveStatus.textContent = "✓ Settings saved!";
+  saveStatus.textContent = "âœ“ Settings saved!";
   setTimeout(() => { saveStatus.textContent = ""; }, 3000);
 });
 
 clearCacheBtn.addEventListener("click", async () => {
   await sendMsg({ type: "CLEAR_CACHE" });
-  saveStatus.textContent = "✓ Translation cache cleared.";
+  saveStatus.textContent = "âœ“ Translation cache cleared.";
   setTimeout(() => { saveStatus.textContent = ""; }, 3000);
 });
 

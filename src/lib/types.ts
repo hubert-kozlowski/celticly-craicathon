@@ -3,7 +3,11 @@
 export interface TranslationResult {
   sourceText: string;
   irishText: string;
-  transliteratedText?: string; // pronunciation hint if available
+  transliteratedText?: string;      // pronunciation hint if available
+  contextSentenceIrish?: string;    // translated surrounding sentence (not cached)
+  exampleSentence?: string;         // AI-generated daily-life example (English)
+  exampleSentenceIrish?: string;    // AI-generated daily-life example (Irish)
+  isWord?: boolean;                 // true when source is a single token
   provider: string;
   fromCache: boolean;
 }
@@ -19,16 +23,16 @@ export interface SavedWord {
 
 export interface ExtensionSettings {
   enabled: boolean;
-  apiKey: string;        // Microsoft Translator API key
-  apiRegion: string;     // Azure region, e.g. "westeurope"
+  apiKey: string;        // Google Cloud Translation API key
   popupAutoDismissMs: number;   // 0 = stay until dismissed manually
   showPhonetics: boolean;
+  theme: 'light' | 'dark' | 'auto'; // 'auto' follows OS preference
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   enabled: true,
   apiKey: "",
-  apiRegion: "westeurope",
   popupAutoDismissMs: 8000,
   showPhonetics: false,
+  theme: 'light',
 };

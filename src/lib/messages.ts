@@ -7,6 +7,7 @@ import type { TranslationResult, SavedWord } from "./types";
 export interface TranslateRequest {
   type: "TRANSLATE";
   text: string;
+  context?: string; // surrounding sentence for grammar-aware translation
 }
 
 export interface SaveWordRequest {
@@ -39,6 +40,12 @@ export interface ClearCacheRequest {
   type: "CLEAR_CACHE";
 }
 
+export interface GetExampleRequest {
+  type: "GET_EXAMPLE";
+  sourceText: string;
+  irishText: string;
+}
+
 export type ExtensionRequest =
   | TranslateRequest
   | SaveWordRequest
@@ -46,7 +53,8 @@ export type ExtensionRequest =
   | DeleteSavedWordRequest
   | GetSettingsRequest
   | SaveSettingsRequest
-  | ClearCacheRequest;
+  | ClearCacheRequest
+  | GetExampleRequest;
 
 // ── Inbound: service worker → content script ───────────────────────────────
 
@@ -82,6 +90,12 @@ export interface ClearCacheResponse {
   ok: true;
 }
 
+export interface GetExampleResponse {
+  ok: true;
+  exampleSentence: string;
+  exampleSentenceIrish: string;
+}
+
 export interface ErrorResponse {
   ok: false;
   error: string;
@@ -96,4 +110,5 @@ export type ExtensionResponse =
   | GetSettingsResponse
   | SaveSettingsResponse
   | ClearCacheResponse
+  | GetExampleResponse
   | ErrorResponse;

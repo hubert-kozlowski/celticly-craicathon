@@ -1,4 +1,4 @@
-// ─── Browser action popup script ─────────────────────────────────────────────
+// â”€â”€â”€ Browser action popup script â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 import type { ExtensionResponse } from "../lib/messages";
 import type { SavedWord, ExtensionSettings } from "../lib/types";
@@ -14,6 +14,16 @@ async function sendMsg(req: object): Promise<ExtensionResponse> {
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function applyTheme(theme: "light" | "dark" | "auto"): void {
+  const resolved =
+    theme === "auto"
+      ? window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light"
+      : theme;
+  document.documentElement.setAttribute("data-theme", resolved);
 }
 
 async function init(): Promise<void> {
@@ -32,11 +42,12 @@ async function init(): Promise<void> {
   openOptions.addEventListener("click", openOptionsPage);
   openOptionsKey?.addEventListener("click", openOptionsPage);
 
-  // Load settings
+  // Load settings & apply theme
   const settingsResp = await sendMsg({ type: "GET_SETTINGS" });
   let settings: ExtensionSettings | null = null;
   if (settingsResp.ok && "settings" in settingsResp) {
     settings = settingsResp.settings;
+    applyTheme(settings.theme ?? "light");
     toggle.checked = settings.enabled;
     enabledLabel.textContent = settings.enabled ? "On" : "Off";
     if (!settings.apiKey) {

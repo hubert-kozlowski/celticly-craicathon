@@ -32,7 +32,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const text = info.selectionText.trim();
   if (!text) return;
 
-  // Trigger the same translation flow by messaging the content script
   chrome.tabs.sendMessage(tab.id, {
     type: "TRANSLATE_SELECTION",
     text,
@@ -58,7 +57,6 @@ chrome.runtime.onMessage.addListener(
         sendResponse({ ok: false, error: message, code: code ?? "UNKNOWN" });
       });
 
-    // Return true to signal we'll respond asynchronously
     return true;
   }
 );
@@ -68,7 +66,10 @@ async function handleMessage(
 ): Promise<ExtensionResponse> {
   switch (request.type) {
     case "TRANSLATE":
-      return handleTranslate(request.text);
+      return handleTranslate(request.text, request.context);
+
+    case "GET_EXAMPLE":
+      return handleGetExample(request.sourceText, request.irishText);
 
     case "SAVE_WORD":
       return handleSaveWord(
@@ -110,39 +111,109 @@ async function handleMessage(
 
 // ── Translation logic ─────────────────────────────────────────────────────────
 
-const TARGET_LANG = "ga"; // ISO 639-1 code for Irish (Gaeilge)
-const MAX_TEXT_LENGTH = 500; // chars; avoid billing surprises
+const TARGET_LANG = "ga";
+const MAX_TEXT_LENGTH = 500;
+const MAX_CONTEXT_LENGTH = 400;
 
-async function handleTranslate(rawText: string): Promise<ExtensionResponse> {
+async function handleTranslate(rawText: string, context?: string): Promise<ExtensionResponse> {
   const text = rawText.trim().slice(0, MAX_TEXT_LENGTH);
   if (!text) {
     return { ok: false, error: "Empty selection", code: "UNKNOWN" };
   }
 
-  // 1. Check local cache first
+  const isWord = !text.includes(" ");
+
+  // 1. Check local cache
   const cached = await getCachedTranslation(text, TARGET_LANG);
   if (cached) {
+    // Context translation is always fresh (not stored in cache)
+    if (context && isWord) {
+      const contextResult = await translateContextSentence(context, text, TARGET_LANG);
+      if (contextResult) {
+        return { ok: true, result: { ...cached, contextSentenceIrish: contextResult, fromCache: true } };
+      }
+    }
     return { ok: true, result: cached };
   }
 
-  // 2. Verify we have an API key
+  // 2. Verify API key
   const settings = await getSettings();
   if (!settings.apiKey) {
     return {
       ok: false,
-      error:
-        "No API key configured. Open the extension options to add your Microsoft Translator key.",
+      error: "No API key configured. Open the extension options to add your Google Cloud Translation API key.",
       code: "NO_API_KEY",
     };
   }
 
-  // 3. Call the provider
-  const provider = createProvider(settings.apiKey, settings.apiRegion);
-  const result = await provider.translate(text, TARGET_LANG);
+  const provider = createProvider(settings.apiKey);
 
-  // 4. Cache and return
-  await setCachedTranslation(text, TARGET_LANG, result);
+  // 3. Translate standalone text + context sentence (in parallel)
+  const contextPromise = context && isWord
+    ? translateContextSentence(context, text, TARGET_LANG)
+    : Promise.resolve(null);
+
+  const [result, contextSentenceIrish] = await Promise.all([
+    provider.translate(text, TARGET_LANG),
+    contextPromise,
+  ]);
+
+  if (contextSentenceIrish) {
+    result.contextSentenceIrish = contextSentenceIrish;
+  }
+
+  // 4. Cache the core result (without context sentence, which varies per page)
+  const toCache = { ...result };
+  delete toCache.contextSentenceIrish;
+  await setCachedTranslation(text, TARGET_LANG, toCache);
+
   return { ok: true, result };
+}
+
+/** Translates the full sentence containing the selected word for context. */
+async function translateContextSentence(
+  context: string,
+  _selectedWord: string,
+  targetLang: string
+): Promise<string | null> {
+  const settings = await getSettings();
+  if (!settings.apiKey) return null;
+  const provider = createProvider(settings.apiKey);
+  try {
+    return await provider.translateRaw(context.slice(0, MAX_CONTEXT_LENGTH), targetLang);
+  } catch {
+    return null;
+  }
+}
+
+// ── Example sentence generation ───────────────────────────────────────────────
+
+async function handleGetExample(
+  sourceText: string,
+  irishText: string
+): Promise<ExtensionResponse> {
+  // Only generate examples for single words
+  if (sourceText.includes(" ")) {
+    return { ok: false, error: "Examples only for single words", code: "UNKNOWN" };
+  }
+
+  const settings = await getSettings();
+  if (!settings.apiKey) {
+    return { ok: false, error: "No API key", code: "NO_API_KEY" };
+  }
+
+  const provider = createProvider(settings.apiKey);
+  const example = await provider.generateExample(sourceText, irishText);
+
+  if (!example) {
+    return { ok: false, error: "Could not generate example", code: "UNKNOWN" };
+  }
+
+  return {
+    ok: true,
+    exampleSentence: example.english,
+    exampleSentenceIrish: example.irish,
+  };
 }
 
 // ── Save word logic ───────────────────────────────────────────────────────────
@@ -153,6 +224,15 @@ async function handleSaveWord(
   pageUrl: string,
   pageTitle: string
 ): Promise<ExtensionResponse> {
+  // Guard: only single words may be added to the word bank
+  if (sourceText.trim().includes(" ")) {
+    return {
+      ok: false,
+      error: "Only individual words can be saved to the Word Bank.",
+      code: "UNKNOWN",
+    };
+  }
+
   const word: SavedWord = {
     id: generateId(),
     sourceText,
