@@ -1,5 +1,7 @@
 # 🍀 Celticly
 
+Website: https://celticly.lovable.app/
+
 > A browser extension that weaves Irish into your everyday web experience — like Grammarly, but for Gaeilge.
 
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4CAF50?style=flat-square&logo=googlechrome&logoColor=white)
