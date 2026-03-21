@@ -2,6 +2,8 @@
 
 Website: https://celticly.lovable.app/
 
+Made by: Ivan S. (Website, Project Manager, Art Design),  and Hubert Koz. (Programming, Git, Project Manager).
+
 > A browser extension that weaves Irish into your everyday web experience — like Grammarly, but for Gaeilge.
 
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4CAF50?style=flat-square&logo=googlechrome&logoColor=white)
