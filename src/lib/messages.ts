@@ -1,0 +1,99 @@
+// ─── Runtime message schema shared across extension contexts ────────────────
+
+import type { TranslationResult, SavedWord } from "./types";
+
+// ── Outbound: content script → service worker ──────────────────────────────
+
+export interface TranslateRequest {
+  type: "TRANSLATE";
+  text: string;
+}
+
+export interface SaveWordRequest {
+  type: "SAVE_WORD";
+  sourceText: string;
+  irishText: string;
+  pageUrl: string;
+  pageTitle: string;
+}
+
+export interface GetSavedWordsRequest {
+  type: "GET_SAVED_WORDS";
+}
+
+export interface DeleteSavedWordRequest {
+  type: "DELETE_SAVED_WORD";
+  id: string;
+}
+
+export interface GetSettingsRequest {
+  type: "GET_SETTINGS";
+}
+
+export interface SaveSettingsRequest {
+  type: "SAVE_SETTINGS";
+  settings: Record<string, unknown>;
+}
+
+export interface ClearCacheRequest {
+  type: "CLEAR_CACHE";
+}
+
+export type ExtensionRequest =
+  | TranslateRequest
+  | SaveWordRequest
+  | GetSavedWordsRequest
+  | DeleteSavedWordRequest
+  | GetSettingsRequest
+  | SaveSettingsRequest
+  | ClearCacheRequest;
+
+// ── Inbound: service worker → content script ───────────────────────────────
+
+export interface TranslateResponse {
+  ok: true;
+  result: TranslationResult;
+}
+
+export interface SaveWordResponse {
+  ok: true;
+  savedWord: SavedWord;
+}
+
+export interface GetSavedWordsResponse {
+  ok: true;
+  words: SavedWord[];
+}
+
+export interface DeleteSavedWordResponse {
+  ok: true;
+}
+
+export interface GetSettingsResponse {
+  ok: true;
+  settings: import("./types").ExtensionSettings;
+}
+
+export interface SaveSettingsResponse {
+  ok: true;
+}
+
+export interface ClearCacheResponse {
+  ok: true;
+}
+
+export interface ErrorResponse {
+  ok: false;
+  error: string;
+  code?: "NO_API_KEY" | "NETWORK" | "PROVIDER" | "RATE_LIMIT" | "UNKNOWN";
+}
+
+export type ExtensionResponse =
+  | TranslateResponse
+  | SaveWordResponse
+  | GetSavedWordsResponse
+  | DeleteSavedWordResponse
+  | GetSettingsResponse
+  | SaveSettingsResponse
+  | ClearCacheResponse
+  | ErrorResponse;
