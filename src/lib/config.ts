@@ -3,4 +3,4 @@
 // below with your actual Vercel deployment URL, then run `npm run build`.
 // e.g. "https://celticly.vercel.app"
 
-export const PROXY_BASE_URL = "https://YOUR-PROJECT.vercel.app";
+export const PROXY_BASE_URL = "https://celticly-craicathon.vercel.app";
