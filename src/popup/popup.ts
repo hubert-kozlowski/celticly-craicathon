@@ -31,16 +31,13 @@ async function init(): Promise<void> {
   const enabledLabel = document.getElementById("enabled-label")!;
   const wordCount = document.getElementById("word-count")!;
   const recentList = document.getElementById("recent-list")!;
-  const keyWarning = document.getElementById("key-warning")!;
   const openOptions = document.getElementById("open-options")!;
-  const openOptionsKey = document.getElementById("open-options-key");
 
   const openOptionsPage = (e: Event): void => {
     e.preventDefault();
     chrome.runtime.openOptionsPage();
   };
   openOptions.addEventListener("click", openOptionsPage);
-  openOptionsKey?.addEventListener("click", openOptionsPage);
 
   // Load settings & apply theme
   const settingsResp = await sendMsg({ type: "GET_SETTINGS" });
@@ -50,9 +47,6 @@ async function init(): Promise<void> {
     applyTheme(settings.theme ?? "light");
     toggle.checked = settings.enabled;
     enabledLabel.textContent = settings.enabled ? "On" : "Off";
-    if (!settings.apiKey) {
-      keyWarning.style.display = "block";
-    }
   }
 
   toggle.addEventListener("change", async () => {

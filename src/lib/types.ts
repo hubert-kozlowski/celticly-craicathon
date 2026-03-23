@@ -3,16 +3,25 @@
 export interface TranslationResult {
   sourceText: string;
   irishText: string;
-  transliteratedText?: string;      // pronunciation hint if available
   contextSentenceIrish?: string;    // translated surrounding sentence (not cached)
-  exampleSentence?: string;         // AI-generated daily-life example (English)
-  exampleSentenceIrish?: string;    // AI-generated daily-life example (Irish)
-  pronunciation?: string;           // readable phonetic guide for the Irish word
-  wordType?: string;                // grammatical type, e.g. "masculine noun", "verb"
+  wordType?: string;                // grammatical type from Wiktionary, e.g. "Noun", "Verb"
   sameInBothLanguages?: boolean;    // true when Irish translation matches the source (loanwords, proper nouns)
   isWord?: boolean;                 // true when source is a single token
   provider: string;
   fromCache: boolean;
+}
+
+export interface GrammarError {
+  ruleId: string;
+  fromy: string;
+  fromx: string;
+  toy: string;
+  tox: string;
+  msg: string;
+  context: string;
+  contextoffset: string;
+  errortext: string;
+  errorlength: string;
 }
 
 export interface SavedWord {
@@ -26,7 +35,6 @@ export interface SavedWord {
 
 export interface ExtensionSettings {
   enabled: boolean;
-  apiKey: string;             // Google Cloud Translation API key
   popupAutoDismissMs: number; // 0 = stay until dismissed manually
   showPhonetics: boolean;
   theme: 'light' | 'dark' | 'auto'; // 'auto' follows OS preference
@@ -34,7 +42,6 @@ export interface ExtensionSettings {
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
   enabled: true,
-  apiKey: "",
   popupAutoDismissMs: 8000,
   showPhonetics: false,
   theme: 'light',

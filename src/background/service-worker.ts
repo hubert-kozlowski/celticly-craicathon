@@ -107,6 +107,9 @@ async function handleMessage(
     case "GET_HINT":
       return handleGetHint(request.sourceText, request.irishText);
 
+    case "CHECK_GRAMMAR":
+      return handleCheckGrammar(request.text);
+
     default:
       return { ok: false, error: "Unknown message type", code: "UNKNOWN" };
   }
@@ -139,17 +142,8 @@ async function handleTranslate(rawText: string, context?: string): Promise<Exten
     return { ok: true, result: cached };
   }
 
-  // 2. Verify API key
-  const settings = await getSettings();
-  if (!settings.apiKey) {
-    return {
-      ok: false,
-      error: "No API key configured. Open the extension options to add your Google Cloud Translation API key.",
-      code: "NO_API_KEY",
-    };
-  }
-
-  const provider = createProvider(settings.apiKey);
+  // 2. Translate via proxy
+  const provider = createProvider();
   const contextPromise = context && isWord
     ? translateContextSentence(context, text, TARGET_LANG)
     : Promise.resolve(null);
@@ -163,17 +157,9 @@ async function handleTranslate(rawText: string, context?: string): Promise<Exten
     result.contextSentenceIrish = contextSentenceIrish;
   }
 
-  // 3. For single words, fetch rich insights (phonetics, type, example) via Gemini.
-  //    Runs inline so the popup shows complete data in one shot.
-  //    4 s timeout prevents blocking on slow API; silently degrades if unavailable.
+  // 3. For single words, look up the grammatical word type from Wiktionary (free, no key).
   if (isWord && !result.sameInBothLanguages) {
-    const insights = await provider.generateWordInsights(text, result.irishText).catch(() => null);
-    if (insights) {
-      result.pronunciation = insights.pronunciation || undefined;
-      result.wordType = insights.wordType || undefined;
-      result.exampleSentence = insights.english;
-      result.exampleSentenceIrish = insights.irish;
-    }
+    result.wordType = await provider.fetchWordType(result.irishText).catch(() => null) ?? undefined;
   }
 
   // 4. Cache the core result (without context sentence, which varies per page)
@@ -190,9 +176,7 @@ async function translateContextSentence(
   _selectedWord: string,
   targetLang: string
 ): Promise<string | null> {
-  const settings = await getSettings();
-  if (!settings.apiKey) return null;
-  const provider = createProvider(settings.apiKey);
+  const provider = createProvider();
   try {
     return await provider.translateRaw(context.slice(0, MAX_CONTEXT_LENGTH), targetLang);
   } catch {
@@ -206,8 +190,7 @@ async function handleSpeakWord(
   text: string,
   langCode: string
 ): Promise<ExtensionResponse> {
-  const settings = await getSettings();
-  const provider = createProvider(settings.apiKey);
+  const provider = createProvider();
   const audioContent = await provider.synthesizeSpeech(text, langCode);
   return { ok: true, audioContent };
 }
@@ -216,19 +199,20 @@ async function handleSpeakWord(
 
 async function handleGetHint(
   sourceText: string,
-  irishText: string
+  _irishText: string
 ): Promise<ExtensionResponse> {
-  const settings = await getSettings();
-  if (!settings.apiKey) {
-    return { ok: false, error: "No API key configured.", code: "NO_API_KEY" };
-  }
-  const provider = createProvider(settings.apiKey);
-  const result = await provider.generateHints(sourceText, irishText);
-  return {
-    ok: true,
-    hints: result?.hints ?? [],
-    phonetic: result?.phonetic ?? "",
-  };
+  const provider = createProvider();
+  const { hints } = provider.generateLocalHints(sourceText);
+  return { ok: true, hints, phonetic: "" };
+}
+
+// ── Grammar check logic ─────────────────────────────────────────────────────────────────
+
+async function handleCheckGrammar(text: string): Promise<ExtensionResponse> {
+  // an Gramadóir is a free public API — no API key needed.
+  const provider = createProvider();
+  const errors = await provider.checkGrammar(text);
+  return { ok: true, errors };
 }
 // ── Save word logic ───────────────────────────────────────────────────────────
 

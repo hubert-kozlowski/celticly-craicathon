@@ -195,16 +195,23 @@ function triggerTranslation(text: string, x: number, y: number, context?: string
               audio.play().catch(() => { /* autoplay policy – silently ignore */ });
             }
           },
+          onCheckGrammar: async (irishText: string) => {
+            const grammarResp = await sendMessage({ type: "CHECK_GRAMMAR", text: irishText });
+            if (grammarResp.ok && "errors" in grammarResp) {
+              return (grammarResp as { ok: true; errors: import("../lib/types").GrammarError[] }).errors;
+            }
+            return [];
+          },
         });
       } else {
         const errMsg = resp.ok ? "Unexpected response" : (resp as { error: string }).error;
-        popup.showError(errMsg, { onSave: async () => {}, onClose: dismissPopup, onTranslateWord: () => {}, onSpeak: async () => {} });
+        popup.showError(errMsg, { onSave: async () => {}, onClose: dismissPopup, onTranslateWord: () => {}, onSpeak: async () => {}, onCheckGrammar: async () => [] });
       }
     })
     .catch((err: unknown) => {
       if (!popup) return;
       const msg = err instanceof Error ? err.message : String(err);
-      popup.showError(msg, { onSave: async () => {}, onClose: dismissPopup, onTranslateWord: () => {}, onSpeak: async () => {} });
+      popup.showError(msg, { onSave: async () => {}, onClose: dismissPopup, onTranslateWord: () => {}, onSpeak: async () => {}, onCheckGrammar: async () => [] });
     });
 }
 

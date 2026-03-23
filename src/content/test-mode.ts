@@ -62,15 +62,14 @@ export async function startTestMode(
 
   // Translate all candidates in parallel (cache hits are instant)
   const results = await Promise.all(
-    candidates.map(async (word): Promise<[string, string, string] | null> => {
+    candidates.map(async (word): Promise<[string, string] | null> => {
       try {
         const resp = await sendMessage({ type: "TRANSLATE", text: word });
         if (resp.ok && "result" in resp) {
           const irish = resp.result.irishText.trim();
           // Skip words where translation equals original (no useful quiz item)
           if (irish.toLowerCase() !== word.toLowerCase() && irish.length > 0) {
-            const pronunciation = resp.result.pronunciation ?? "";
-            return [word, irish, pronunciation];
+            return [word, irish];
           }
         }
       } catch {
@@ -80,10 +79,10 @@ export async function startTestMode(
     })
   );
 
-  const wordMap = new Map<string, { irish: string; pronunciation: string }>(
+  const wordMap = new Map<string, { irish: string }>(
     results
-      .filter((t): t is [string, string, string] => t !== null)
-      .map(([word, irish, pronunciation]) => [word, { irish, pronunciation }])
+      .filter((t): t is [string, string] => t !== null)
+      .map(([word, irish]) => [word, { irish }])
   );
 
   if (wordMap.size === 0) return;
@@ -157,7 +156,7 @@ function shuffleArray<T>(arr: T[]): void {
 
 // ── DOM replacement ────────────────────────────────────────────────────────────
 
-function replaceWordsInDom(wordMap: Map<string, { irish: string; pronunciation: string }>): void {
+function replaceWordsInDom(wordMap: Map<string, { irish: string }>): void {
   const escaped = Array.from(wordMap.keys()).map(escapeRegex);
   const pattern = new RegExp(`\\b(${escaped.join("|")})\\b`, "gi");
 
@@ -197,12 +196,10 @@ function replaceWordsInDom(wordMap: Map<string, { irish: string; pronunciation: 
 
       const entry = wordMap.get(word.toLowerCase());
       const irishText = entry?.irish ?? word;
-      const pronunciation = entry?.pronunciation ?? "";
       const span = document.createElement("span");
       span.dataset.celticlyTest = "word";
       span.dataset.original = word;
       span.dataset.irish = irishText;
-      span.dataset.pronunciation = pronunciation;
       span.dataset.answered = "false";
       span.textContent = irishText;
       applySpanUnansweredStyle(span);
@@ -267,17 +264,7 @@ function onSpanHover(span: HTMLElement): void {
     "max-width:260px",
   ].join(";");
 
-  // ── Phonetic pronunciation ──
-  const pronunciation = span.dataset.pronunciation ?? "";
-  if (pronunciation) {
-    const phoneticRow = document.createElement("div");
-    phoneticRow.style.cssText =
-      "font-size:12px;color:#6B7280;font-style:italic;padding:0 2px;" +
-      "display:flex;align-items:center;gap:4px;";
-    phoneticRow.textContent = `🔤 ${pronunciation}`;
-    wrap.appendChild(phoneticRow);
-  }
-
+  // candidates.map above returned [word, irish] pairs, no pronunciation available
   // ── Input row ──
   const inputRow = document.createElement("div");
   inputRow.style.cssText = "display:flex;align-items:center;gap:6px;";
@@ -339,7 +326,7 @@ function onSpanHover(span: HTMLElement): void {
           if (resp.hints.length > 0) {
             lines.push("Similar words: " + resp.hints.join(", "));
           }
-          if (resp.phonetic && !pronunciation) {
+          if (resp.phonetic) {
             lines.push(`🔤 ${resp.phonetic}`);
           }
           hintArea.textContent = lines.length > 0 ? lines.join(" · ") : "No hints available";

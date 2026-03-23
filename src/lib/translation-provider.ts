@@ -1,46 +1,42 @@
 // ─── Translation provider abstraction ────────────────────────────────────────
-// Currently implemented: Google Cloud Translation API v2 + Gemini for examples.
+// Translation calls are proxied through the Vercel serverless function
+// (api/translate.ts) so the Google API key stays server-side.
+// Word type: Wiktionary REST API (free, no key).
+// Grammar check: an Gramadóir web API (free, no key).
 // To swap providers: implement the TranslationProvider interface and update
 // createProvider() below.
 
-import type { TranslationResult } from "./types";
+import type { TranslationResult, GrammarError } from "./types";
+import { PROXY_BASE_URL } from "./config";
 
 export interface TranslationProvider {
   translate(text: string, targetLang: string): Promise<TranslationResult>;
   translateRaw(text: string, targetLang: string): Promise<string>;
-  generateWordInsights(
-    word: string,
-    irishWord: string
-  ): Promise<{ english: string; irish: string; pronunciation: string; wordType: string } | null>;
-  generateHints(
-    sourceWord: string,
-    irishWord: string
-  ): Promise<{ hints: string[]; phonetic: string } | null>;
+  fetchWordType(irishWord: string): Promise<string | null>;
+  generateLocalHints(sourceWord: string): { hints: string[] };
+  checkGrammar(text: string): Promise<GrammarError[]>;
   synthesizeSpeech(text: string, langCode: string): Promise<string>;
 }
 
-// ── Google Cloud Translation ──────────────────────────────────────────────────
-// Docs: https://cloud.google.com/translate/docs/reference/rest/v2/translate
-// Free tier: 500,000 chars/month. Irish (ga) is a supported language.
+// ── Celticly Translation Proxy ───────────────────────────────────────────────
+// Requests go through the Vercel Edge Function which holds the Google API key.
+// Update PROXY_BASE_URL in src/lib/config.ts after deploying to Vercel.
 
-const GOOGLE_TRANSLATE_ENDPOINT =
-  "https://translation.googleapis.com/language/translate/v2";
+const PROXY_TRANSLATE_ENDPOINT = `${PROXY_BASE_URL}/api/translate`;
 // ── Abair.ie Text-to-Speech ─────────────────────────────────────────────────
 // API at api.abair.ie — Irish-language TTS built at Trinity College Dublin.
 // No API key required. Supports Connacht, Munster, and Ulster dialects.
 const ABAIR_TTS_ENDPOINT = "https://api.abair.ie/v3/synthesis";
 // Default voice: Sibéal — Connemara (Connacht Irish), female, PIPER model.
 const ABAIR_DEFAULT_VOICE = "ga_CO_snc_piper";
-// ── Google Gemini ─────────────────────────────────────────────────────────────
-// Used for generating context-aware example sentences.
-// Requires the "Generative Language API" to be enabled on the same project.
-const GEMINI_ENDPOINT =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
+// ── Wiktionary REST API ───────────────────────────────────────────────────
+// Free, no key. Used to look up the grammatical part-of-speech for Irish words.
+const WIKTIONARY_ENDPOINT = "https://en.wiktionary.org/api/rest_v1/page/definition";
+// ── an Gramadóir web API ──────────────────────────────────────────────────
+// Free Irish grammar checker from cadhan.com. No key required.
+const GRAMADOIR_ENDPOINT = "https://cadhan.com/api/gramadoir/1.0";
 
 export class GoogleTranslationProvider implements TranslationProvider {
-  constructor(
-    private readonly apiKey: string
-  ) {}
 
   /** Core translate call – returns a full TranslationResult. */
   async translate(text: string, targetLang: string): Promise<TranslationResult> {
@@ -57,12 +53,10 @@ export class GoogleTranslationProvider implements TranslationProvider {
 
   /** Translate arbitrary text and return only the translated string. */
   async translateRaw(text: string, targetLang: string): Promise<string> {
-    const url = `${GOOGLE_TRANSLATE_ENDPOINT}?key=${encodeURIComponent(this.apiKey)}`;
-
-    const response = await fetch(url, {
+    const response = await fetch(PROXY_TRANSLATE_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ q: text, target: targetLang, format: "text" }),
+      body: JSON.stringify({ text, targetLang }),
       signal: AbortSignal.timeout(8000),
     });
 
@@ -74,20 +68,15 @@ export class GoogleTranslationProvider implements TranslationProvider {
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      const err = new Error(
-        `Google Cloud Translation returned HTTP ${response.status}: ${body}`
-      );
+      const err = new Error(`Translation proxy returned HTTP ${response.status}: ${body}`);
       (err as NodeJS.ErrnoException).code = "PROVIDER";
       throw err;
     }
 
-    const data = (await response.json()) as {
-      data: { translations: Array<{ translatedText: string }> };
-    };
-
-    const translated = data?.data?.translations?.[0]?.translatedText;
+    const data = (await response.json()) as { translatedText?: string };
+    const translated = data?.translatedText;
     if (!translated) {
-      const err = new Error("Unexpected response shape from translation provider");
+      const err = new Error("Unexpected response from translation proxy");
       (err as NodeJS.ErrnoException).code = "PROVIDER";
       throw err;
     }
@@ -96,111 +85,64 @@ export class GoogleTranslationProvider implements TranslationProvider {
   }
 
   /**
-   * Call Gemini to produce: a phonetic pronunciation guide, grammatical type,
-   * and one daily-life example sentence (English + Irish). Returns null on any
-   * failure so callers can degrade gracefully.
+   * Look up the grammatical part-of-speech for an Irish word via the free
+   * Wiktionary REST API. Returns null if the word is not found or on failure.
    */
-  async generateWordInsights(
-    word: string,
-    irishWord: string
-  ): Promise<{ english: string; irish: string; pronunciation: string; wordType: string } | null> {
+  async fetchWordType(irishWord: string): Promise<string | null> {
     try {
-      const prompt =
-        `For the Irish word "${irishWord}" (from English "${word}"), reply with EXACTLY these 4 lines and nothing else:\n` +
-        `PHONETIC: readable pronunciation for an English speaker (e.g. "GAH-luh")\n` +
-        `TYPE: grammatical type (e.g. "masculine noun", "feminine noun", "verb", "adjective")\n` +
-        `EXAMPLE_EN: one short natural sentence (6-10 words) using the English word "${word}"\n` +
-        `EXAMPLE_GA: Irish (Gaeilge) translation of that sentence, with correct mutations`;
-
-      const url = `${GEMINI_ENDPOINT}?key=${encodeURIComponent(this.apiKey)}`;
+      const url = `${WIKTIONARY_ENDPOINT}/${encodeURIComponent(irishWord.toLowerCase())}`;
       const resp = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 120, temperature: 0.5 },
-        }),
-        signal: AbortSignal.timeout(4000),
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(3000),
       });
-
       if (!resp.ok) return null;
-
-      const data = (await resp.json()) as {
-        candidates?: Array<{
-          content?: { parts?: Array<{ text?: string }> };
-        }>;
-      };
-
-      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-      const phoneticMatch = raw.match(/PHONETIC:\s*(.+)/i);
-      const typeMatch     = raw.match(/TYPE:\s*(.+)/i);
-      const enMatch       = raw.match(/EXAMPLE_EN:\s*(.+)/i);
-      const gaMatch       = raw.match(/EXAMPLE_GA:\s*(.+)/i);
-      if (!enMatch || !gaMatch) return null;
-
-      return {
-        english:       enMatch[1].trim(),
-        irish:         gaMatch[1].trim(),
-        pronunciation: phoneticMatch ? phoneticMatch[1].trim() : "",
-        wordType:      typeMatch     ? typeMatch[1].trim()     : "",
-      };
+      const data = (await resp.json()) as Record<string, Array<{ partOfSpeech?: string }>>;
+      const gaSection = data["ga"];
+      if (Array.isArray(gaSection) && gaSection.length > 0 && gaSection[0].partOfSpeech) {
+        return gaSection[0].partOfSpeech.toLowerCase();
+      }
+      return null;
     } catch {
       return null;
     }
   }
 
   /**
-   * Call Gemini to produce hint words (similar/related English words) and a
-   * phonetic pronunciation guide for the Irish word. Returns null on failure.
+   * Generate quiz hint clues locally - no network request needed.
+   * Returns three clues about the source English word to help the learner.
    */
-  async generateHints(
-    sourceWord: string,
-    irishWord: string
-  ): Promise<{ hints: string[]; phonetic: string } | null> {
+  generateLocalHints(sourceWord: string): { hints: string[] } {
+    const w = sourceWord.trim();
+    const hints: string[] = [
+      `Starts with '${(w[0] ?? "?").toUpperCase()}'`,
+      `${w.length} letter${w.length !== 1 ? "s" : ""} long`,
+    ];
+    const vowel = w.match(/[aeiou]/i)?.[0];
+    if (vowel) hints.push(`Contains the vowel '${vowel.toUpperCase()}'`);
+    return { hints };
+  }
+
+  /**
+   * Check Irish text for grammatical errors using the free an Gramadóir API
+   * (cadhan.com). No API key required. Returns an empty array on failure.
+   */
+  async checkGrammar(text: string): Promise<GrammarError[]> {
     try {
-      const prompt =
-        `For the English word "${sourceWord}" (Irish: "${irishWord}"), reply with EXACTLY these lines and nothing else:\n` +
-        `PHONETIC: readable pronunciation of the Irish word for an English speaker (e.g. "GAH-luh")\n` +
-        `HINT1: a single English synonym or closely related word (NOT the answer "${sourceWord}")\n` +
-        `HINT2: another single English synonym or related word (NOT the answer "${sourceWord}")\n` +
-        `HINT3: a third single English synonym or related word (NOT the answer "${sourceWord}")`;
-
-      const url = `${GEMINI_ENDPOINT}?key=${encodeURIComponent(this.apiKey)}`;
-      const resp = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 100, temperature: 0.7 },
-        }),
-        signal: AbortSignal.timeout(4000),
+      const body = new URLSearchParams({
+        teacs: text,
+        teanga: "en",
+        cliant: "celticly",
       });
-
-      if (!resp.ok) return null;
-
-      const data = (await resp.json()) as {
-        candidates?: Array<{
-          content?: { parts?: Array<{ text?: string }> };
-        }>;
-      };
-
-      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-      const phoneticMatch = raw.match(/PHONETIC:\s*(.+)/i);
-      const hint1 = raw.match(/HINT1:\s*(.+)/i);
-      const hint2 = raw.match(/HINT2:\s*(.+)/i);
-      const hint3 = raw.match(/HINT3:\s*(.+)/i);
-
-      const hints = [hint1, hint2, hint3]
-        .filter((m): m is RegExpMatchArray => m !== null)
-        .map((m) => m[1].trim())
-        .filter((h) => h.toLowerCase() !== sourceWord.toLowerCase());
-
-      return {
-        hints,
-        phonetic: phoneticMatch ? phoneticMatch[1].trim() : "",
-      };
+      const resp = await fetch(GRAMADOIR_ENDPOINT, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!resp.ok) return [];
+      return (await resp.json()) as GrammarError[];
     } catch {
-      return null;
+      return [];
     }
   }
 
@@ -245,6 +187,6 @@ export class GoogleTranslationProvider implements TranslationProvider {
   }
 }
 
-export function createProvider(apiKey: string): TranslationProvider {
-  return new GoogleTranslationProvider(apiKey);
+export function createProvider(): TranslationProvider {
+  return new GoogleTranslationProvider();
 }

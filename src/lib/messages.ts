@@ -1,6 +1,6 @@
 // ─── Runtime message schema shared across extension contexts ────────────────
 
-import type { TranslationResult, SavedWord } from "./types";
+import type { TranslationResult, SavedWord, GrammarError } from "./types";
 
 // ── Outbound: content script → service worker ──────────────────────────────
 
@@ -58,6 +58,11 @@ export interface GetHintRequest {
   irishText: string;
 }
 
+export interface CheckGrammarRequest {
+  type: "CHECK_GRAMMAR";
+  text: string;
+}
+
 export type ExtensionRequest =
   | TranslateRequest
   | SaveWordRequest
@@ -67,7 +72,8 @@ export type ExtensionRequest =
   | SaveSettingsRequest
   | ClearCacheRequest
   | SpeakWordRequest
-  | GetHintRequest;
+  | GetHintRequest
+  | CheckGrammarRequest;
 
 // ── Inbound: service worker → content script ───────────────────────────────
 
@@ -103,12 +109,9 @@ export interface ClearCacheResponse {
   ok: true;
 }
 
-export interface GetExampleResponse {
+export interface GrammarCheckResponse {
   ok: true;
-  exampleSentence: string;
-  exampleSentenceIrish: string;
-  pronunciation?: string;
-  wordType?: string;
+  errors: GrammarError[];
 }
 
 export interface SpeakWordResponse {
@@ -138,4 +141,5 @@ export type ExtensionResponse =
   | ClearCacheResponse
   | SpeakWordResponse
   | GetHintResponse
+  | GrammarCheckResponse
   | ErrorResponse;

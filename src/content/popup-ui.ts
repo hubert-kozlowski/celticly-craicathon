@@ -2,7 +2,7 @@
 // Renders near the selection, handles all translation states, save action.
 // Light theme by default (Apple / Grammarly-inspired), with a dark variant.
 
-import type { TranslationResult } from "../lib/types";
+import type { TranslationResult, GrammarError } from "../lib/types";
 
 const POPUP_ID = "celticly-popup-host";
 
@@ -409,6 +409,68 @@ const POPUP_STYLES = `
     margin-top: 6px;
     font-style: italic;
   }
+
+  /* ── Grammar check button ── */
+  .cf-grammar-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  .cf-grammar-btn:hover {
+    background: var(--accent-subtle);
+    color: var(--accent-subtle-text);
+    border-color: var(--accent);
+  }
+  .cf-grammar-btn:disabled { opacity: 0.45; cursor: default; }
+
+  /* ── Grammar results section ── */
+  .cf-grammar-section {
+    padding: 8px 14px 10px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+  }
+
+  .cf-grammar-ok {
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 12px;
+  }
+
+  .cf-grammar-error {
+    margin-bottom: 7px;
+    padding: 6px 9px;
+    background: var(--error-bg);
+    border-radius: 6px;
+    line-height: 1.45;
+  }
+  .cf-grammar-error:last-child { margin-bottom: 0; }
+
+  .cf-grammar-errortext {
+    font-weight: 700;
+    color: var(--error-text);
+    margin-right: 5px;
+  }
+
+  .cf-grammar-msg {
+    color: var(--text);
+  }
+
+  .cf-grammar-ctx {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--text-light);
+    font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 `;
 
 export interface PopupCallbacks {
@@ -416,6 +478,7 @@ export interface PopupCallbacks {
   onClose: () => void;
   onTranslateWord: (word: string) => void;
   onSpeak: (irishText: string) => Promise<void>;
+  onCheckGrammar: (irishText: string) => Promise<GrammarError[]>;
 }
 
 export class TranslationPopup {
@@ -580,10 +643,6 @@ export class TranslationPopup {
     const sourceEscaped = escapeHtml(result.sourceText);
     const irishEscaped = escapeHtml(result.irishText);
 
-    const phoneticHtml = result.transliteratedText
-      ? `<div class="cf-phonetic">${escapeHtml(result.transliteratedText)}</div>`
-      : "";
-
     // Context sentence (grammar-aware in-page context)
     const contextHtml = result.contextSentenceIrish
       ? `<div class="cf-context">
@@ -597,26 +656,14 @@ export class TranslationPopup {
       ? this.buildWordChips(result.sourceText)
       : "";
 
-    // Pronunciation + word-type row (shown directly in body for single words)
-    const metaHtml = (isWord && (result.pronunciation || result.wordType)) ? (() => {
-      const p = result.pronunciation ? `<span class="cf-pron">/${escapeHtml(result.pronunciation)}/</span>` : "";
-      const sep = (result.pronunciation && result.wordType) ? `<span class="cf-meta-sep">&#183;</span>` : "";
-      const t = result.wordType ? `<span class="cf-word-type-badge">${escapeHtml(result.wordType)}</span>` : "";
-      return `<div class="cf-meta">${p}${sep}${t}</div>`;
-    })() : "";
+    // Word-type badge (single words only; from Wiktionary)
+    const metaHtml = (isWord && result.wordType)
+      ? `<div class="cf-meta"><span class="cf-word-type-badge">${escapeHtml(result.wordType)}</span></div>`
+      : "";
 
     // Note shown when the word has the same spelling in Irish
     const sameWordHtml = result.sameInBothLanguages
       ? `<div class="cf-same-word">&#x2139; Same spelling in Irish</div>`
-      : "";
-
-    // Example sentence card (single words only; hidden when same in both languages)
-    const exampleHtml = (isWord && !result.sameInBothLanguages && result.exampleSentence)
-      ? `<div class="cf-example">
-           <div class="cf-example-label">&#x1F4A1; Try it in a sentence</div>
-           <div class="cf-example-en">${escapeHtml(result.exampleSentence)}</div>
-           <div class="cf-example-ga">${escapeHtml(result.exampleSentenceIrish ?? "")}</div>
-         </div>`
       : "";
 
     const truncatedNote = truncated
@@ -646,15 +693,17 @@ export class TranslationPopup {
           <div class="cf-irish">${irishEscaped}</div>
           ${speakHtml}
         </div>
-        ${phoneticHtml}
         ${sameWordHtml}
         ${metaHtml}
         ${contextHtml}
         ${wordChipsHtml}
-        ${exampleHtml}
         ${truncatedNote}
       </div>
-      <div class="cf-actions">${saveAreaHtml}</div>
+      <div class="cf-actions">
+        ${saveAreaHtml}
+        <button class="cf-grammar-btn">Check Irish Grammar</button>
+      </div>
+      <div class="cf-grammar-section" style="display:none;"></div>
       ${cachedNote}`;
 
     // Close
@@ -706,6 +755,38 @@ export class TranslationPopup {
         }
       });
     }
+
+    // Grammar check button
+    const grammarBtn = this.popupEl.querySelector<HTMLButtonElement>(".cf-grammar-btn");
+    const grammarSection = this.popupEl.querySelector<HTMLElement>(".cf-grammar-section");
+    grammarBtn?.addEventListener("click", async () => {
+      if (!grammarBtn || !grammarSection) return;
+      this.clearAutoDismiss();
+      grammarBtn.disabled = true;
+      grammarSection.style.display = "block";
+      grammarSection.innerHTML = `<div class="cf-loading"><div class="cf-spinner"></div><span>Checking grammar…</span></div>`;
+      try {
+        const errors = await callbacks.onCheckGrammar(result.irishText);
+        grammarBtn.style.display = "none";
+        if (errors.length === 0) {
+          grammarSection.innerHTML = `<div class="cf-grammar-ok">&#x2713; No grammar issues found</div>`;
+        } else {
+          grammarSection.innerHTML = errors
+            .map(
+              (e) =>
+                `<div class="cf-grammar-error">
+                  <span class="cf-grammar-errortext">${escapeHtml(e.errortext)}</span>
+                  <span class="cf-grammar-msg">${escapeHtml(e.msg)}</span>
+                  <span class="cf-grammar-ctx">${escapeHtml(e.context)}</span>
+                 </div>`
+            )
+            .join("");
+        }
+      } catch {
+        grammarSection.innerHTML = `<div class="cf-grammar-ok">Could not check grammar. Try again later.</div>`;
+        grammarBtn.disabled = false;
+      }
+    });
   }
 
   private buildWordChips(text: string): string {

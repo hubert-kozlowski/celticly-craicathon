@@ -7,45 +7,50 @@
     <style>
       /* â”€â”€ Theme tokens â”€â”€ */
       :root {
-        --bg:           #F7F7F8;
-        --bg-card:      #FFFFFF;
-        --bg-input:     #FFFFFF;
-        --border:       #E2E2E7;
-        --border-focus: #16A34A;
-        --text:         #1C1C1E;
-        --text-muted:   #636366;
-        --text-light:   #AEAEB2;
-        --accent:       #16A34A;
-        --accent-hover: #15803D;
-        --accent-fg:    #FFFFFF;
-        --accent-subtle:#DCFCE7;
-        --danger-bg:    rgba(220,38,38,0.08);
-        --danger-text:  #DC2626;
-        --danger-hover: rgba(220,38,38,0.16);
-        --shadow-card:  0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-        --radius:       12px;
+        --bg: #f7f7f8;
+        --bg-card: #ffffff;
+        --bg-input: #ffffff;
+        --border: #e2e2e7;
+        --border-focus: #16a34a;
+        --text: #1c1c1e;
+        --text-muted: #636366;
+        --text-light: #aeaeb2;
+        --accent: #16a34a;
+        --accent-hover: #15803d;
+        --accent-fg: #ffffff;
+        --accent-subtle: #dcfce7;
+        --danger-bg: rgba(220, 38, 38, 0.08);
+        --danger-text: #dc2626;
+        --danger-hover: rgba(220, 38, 38, 0.16);
+        --shadow-card:
+          0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+        --radius: 12px;
       }
 
       [data-theme="dark"] {
-        --bg:           #111118;
-        --bg-card:      #1C1C2E;
-        --bg-input:     #0E0E1A;
-        --border:       rgba(255,255,255,0.08);
-        --border-focus: #34D399;
-        --text:         #F2F2F7;
-        --text-muted:   #AEAEB2;
-        --text-light:   #636366;
-        --accent:       #34D399;
-        --accent-hover: #10B981;
-        --accent-fg:    #022C22;
-        --accent-subtle:rgba(52,211,153,0.14);
-        --danger-bg:    rgba(252,129,129,0.10);
-        --danger-text:  #FC8181;
-        --danger-hover: rgba(252,129,129,0.20);
-        --shadow-card:  0 2px 8px rgba(0,0,0,0.3);
+        --bg: #111118;
+        --bg-card: #1c1c2e;
+        --bg-input: #0e0e1a;
+        --border: rgba(255, 255, 255, 0.08);
+        --border-focus: #34d399;
+        --text: #f2f2f7;
+        --text-muted: #aeaeb2;
+        --text-light: #636366;
+        --accent: #34d399;
+        --accent-hover: #10b981;
+        --accent-fg: #022c22;
+        --accent-subtle: rgba(52, 211, 153, 0.14);
+        --danger-bg: rgba(252, 129, 129, 0.1);
+        --danger-text: #fc8181;
+        --danger-hover: rgba(252, 129, 129, 0.2);
+        --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.3);
       }
 
-      * { box-sizing: border-box; margin: 0; padding: 0; }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
 
       body {
         max-width: 660px;
@@ -53,10 +58,13 @@
         padding: 32px 24px 48px;
         background: var(--bg);
         color: var(--text);
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 14px;
         line-height: 1.6;
-        transition: background 0.2s, color 0.2s;
+        transition:
+          background 0.2s,
+          color 0.2s;
       }
 
       .page-header {
@@ -67,8 +75,16 @@
         gap: 16px;
       }
 
-      .page-logo { height: 42px; width: auto; display: block; margin-bottom: 4px; }
-      .page-sub { font-size: 13px; color: var(--text-muted); }
+      .page-logo {
+        height: 42px;
+        width: auto;
+        display: block;
+        margin-bottom: 4px;
+      }
+      .page-sub {
+        font-size: 13px;
+        color: var(--text-muted);
+      }
 
       /* Cards */
       .card {
@@ -78,29 +94,48 @@
         margin-bottom: 16px;
         border: 1px solid var(--border);
         box-shadow: var(--shadow-card);
-        transition: background 0.2s, border-color 0.2s;
+        transition:
+          background 0.2s,
+          border-color 0.2s;
       }
 
       .card-title {
-        font-size: 11px; font-weight: 700;
+        font-size: 11px;
+        font-weight: 700;
         color: var(--accent);
         text-transform: uppercase;
         letter-spacing: 0.08em;
         margin-bottom: 16px;
       }
 
-      .field { margin-bottom: 16px; }
-      .field:last-child { margin-bottom: 0; }
+      .field {
+        margin-bottom: 16px;
+      }
+      .field:last-child {
+        margin-bottom: 0;
+      }
 
       label {
-        display: block; font-size: 13px;
-        font-weight: 500; color: var(--text);
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text);
         margin-bottom: 5px;
       }
 
-      .field-hint { font-size: 11px; color: var(--text-light); margin-top: 4px; line-height: 1.5; }
-      .field-hint a { color: var(--accent); text-decoration: none; }
-      .field-hint a:hover { text-decoration: underline; }
+      .field-hint {
+        font-size: 11px;
+        color: var(--text-light);
+        margin-top: 4px;
+        line-height: 1.5;
+      }
+      .field-hint a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+      .field-hint a:hover {
+        text-decoration: underline;
+      }
 
       input[type="text"],
       input[type="password"],
@@ -114,79 +149,153 @@
         color: var(--text);
         font-size: 13px;
         outline: none;
-        transition: border-color 0.15s, box-shadow 0.15s;
+        transition:
+          border-color 0.15s,
+          box-shadow 0.15s;
       }
-      input:focus, select:focus {
+      input:focus,
+      select:focus {
         border-color: var(--border-focus);
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
       }
-      input[type="number"] { max-width: 120px; }
+      input[type="number"] {
+        max-width: 120px;
+      }
 
       /* Toggle switch */
-      .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-      .toggle-text { flex: 1; }
+      .toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .toggle-text {
+        flex: 1;
+      }
 
-      .toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
-      .toggle input { opacity: 0; width: 0; height: 0; }
+      .toggle {
+        position: relative;
+        width: 40px;
+        height: 22px;
+        flex-shrink: 0;
+      }
+      .toggle input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
       .toggle-slider {
-        position: absolute; inset: 0;
+        position: absolute;
+        inset: 0;
         background: var(--border);
-        border-radius: 22px; cursor: pointer;
+        border-radius: 22px;
+        cursor: pointer;
         transition: background 0.2s;
       }
       .toggle-slider:before {
-        content: ""; position: absolute;
-        width: 16px; height: 16px;
-        background: #fff; border-radius: 50%;
-        top: 3px; left: 3px;
+        content: "";
+        position: absolute;
+        width: 16px;
+        height: 16px;
+        background: #fff;
+        border-radius: 50%;
+        top: 3px;
+        left: 3px;
         transition: transform 0.2s;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
       }
-      input:checked + .toggle-slider { background: var(--accent); }
-      input:checked + .toggle-slider:before { transform: translateX(18px); }
+      input:checked + .toggle-slider {
+        background: var(--accent);
+      }
+      input:checked + .toggle-slider:before {
+        transform: translateX(18px);
+      }
 
       /* Buttons */
       .btn {
-        display: inline-flex; align-items: center; gap: 5px;
-        padding: 8px 16px; border-radius: 8px;
-        font-size: 13px; font-weight: 600;
-        cursor: pointer; border: none;
-        transition: background 0.15s, box-shadow 0.15s;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        transition:
+          background 0.15s,
+          box-shadow 0.15s;
       }
       .btn-primary {
-        background: var(--accent); color: var(--accent-fg);
-        box-shadow: 0 1px 4px rgba(22,163,74,0.2);
+        background: var(--accent);
+        color: var(--accent-fg);
+        box-shadow: 0 1px 4px rgba(22, 163, 74, 0.2);
       }
-      .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 2px 8px rgba(22,163,74,0.3); }
-      .btn-danger { background: var(--danger-bg); color: var(--danger-text); }
-      .btn-danger:hover { background: var(--danger-hover); }
+      .btn-primary:hover {
+        background: var(--accent-hover);
+        box-shadow: 0 2px 8px rgba(22, 163, 74, 0.3);
+      }
+      .btn-danger {
+        background: var(--danger-bg);
+        color: var(--danger-text);
+      }
+      .btn-danger:hover {
+        background: var(--danger-hover);
+      }
       .btn-secondary {
         background: var(--bg);
         color: var(--text-muted);
         border: 1px solid var(--border);
       }
-      .btn-secondary:hover { background: var(--border); }
+      .btn-secondary:hover {
+        background: var(--border);
+      }
 
-      .actions-row { display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+      .actions-row {
+        display: flex;
+        gap: 10px;
+        margin-top: 4px;
+        flex-wrap: wrap;
+      }
 
-      #save-status { font-size: 13px; color: var(--accent); font-weight: 600; min-height: 20px; margin-top: 12px; }
+      #save-status {
+        font-size: 13px;
+        color: var(--accent);
+        font-weight: 600;
+        min-height: 20px;
+        margin-top: 12px;
+      }
 
       /* Word bank table */
       .wb-toolbar {
-        display: flex; align-items: center;
-        justify-content: space-between; gap: 10px; margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 12px;
       }
-      .wb-count { font-size: 12px; color: var(--text-light); }
+      .wb-count {
+        font-size: 12px;
+        color: var(--text-light);
+      }
       .wb-table-wrap {
-        overflow-x: auto; border-radius: 8px;
+        overflow-x: auto;
+        border-radius: 8px;
         border: 1px solid var(--border);
       }
-      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
       thead th {
         background: var(--bg);
-        padding: 8px 12px; text-align: left;
-        font-weight: 700; color: var(--text-light);
-        font-size: 10px; text-transform: uppercase;
+        padding: 8px 12px;
+        text-align: left;
+        font-weight: 700;
+        color: var(--text-light);
+        font-size: 10px;
+        text-transform: uppercase;
         letter-spacing: 0.07em;
         border-bottom: 1px solid var(--border);
         white-space: nowrap;
@@ -195,22 +304,46 @@
         border-bottom: 1px solid var(--border);
         transition: background 0.1s;
       }
-      tbody tr:last-child { border-bottom: none; }
-      tbody tr:hover { background: var(--bg); }
+      tbody tr:last-child {
+        border-bottom: none;
+      }
+      tbody tr:hover {
+        background: var(--bg);
+      }
       tbody td {
-        padding: 8px 12px; vertical-align: middle;
-        max-width: 200px; white-space: nowrap;
-        overflow: hidden; text-overflow: ellipsis;
+        padding: 8px 12px;
+        vertical-align: middle;
+        max-width: 200px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
-      .td-actions { text-align: right; width: 50px; }
+      .td-actions {
+        text-align: right;
+        width: 50px;
+      }
       .delete-btn {
-        background: none; border: none; cursor: pointer;
-        color: var(--text-light); font-size: 15px;
-        border-radius: 4px; padding: 2px 5px;
-        transition: color 0.1s, background 0.1s;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--text-light);
+        font-size: 15px;
+        border-radius: 4px;
+        padding: 2px 5px;
+        transition:
+          color 0.1s,
+          background 0.1s;
       }
-      .delete-btn:hover { color: var(--danger-text); background: var(--danger-bg); }
-      .empty-wb { padding: 24px; text-align: center; color: var(--text-light); font-size: 13px; }
+      .delete-btn:hover {
+        color: var(--danger-text);
+        background: var(--danger-bg);
+      }
+      .empty-wb {
+        padding: 24px;
+        text-align: center;
+        color: var(--text-light);
+        font-size: 13px;
+      }
     </style>
   </head>
   <body>
@@ -218,21 +351,6 @@
       <div>
         <img src="media/celticlysub.png" class="page-logo" alt="Celticly" />
         <p class="page-sub">Settings &amp; Word Bank</p>
-      </div>
-    </div>
-
-    <!-- API Settings -->
-    <div class="card">
-      <div class="card-title">Translation API</div>
-      <div class="field">
-        <label for="api-key">Google Cloud Translation API Key</label>
-        <input type="password" id="api-key" placeholder="Paste your key here..." autocomplete="off" />
-        <p class="field-hint">
-          Get a free key from the
-          <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer">Google Cloud Console</a>
-          (APIs &amp; Services &rarr; Credentials &rarr; Create API key, then enable the Cloud Translation API).
-          Free tier: 500,000 characters/month. Enabling the <strong>Generative Language API</strong> also unlocks daily example sentences.
-        </p>
       </div>
     </div>
 
@@ -255,8 +373,17 @@
 
       <div class="field">
         <label for="auto-dismiss">Auto-dismiss popup after (ms)</label>
-        <input type="number" id="auto-dismiss" min="0" max="60000" step="500" value="8000" />
-        <p class="field-hint">Set to 0 to keep the popup open until dismissed manually.</p>
+        <input
+          type="number"
+          id="auto-dismiss"
+          min="0"
+          max="60000"
+          step="500"
+          value="8000"
+        />
+        <p class="field-hint">
+          Set to 0 to keep the popup open until dismissed manually.
+        </p>
       </div>
     </div>
 
@@ -270,13 +397,17 @@
           <option value="dark">Dark</option>
           <option value="auto">Auto (follow system)</option>
         </select>
-        <p class="field-hint">The popup on pages and the extension UI will use this theme.</p>
+        <p class="field-hint">
+          The popup on pages and the extension UI will use this theme.
+        </p>
       </div>
     </div>
 
     <div class="actions-row">
       <button class="btn btn-primary" id="save-btn">Save Settings</button>
-      <button class="btn btn-secondary" id="clear-cache-btn">Clear Translation Cache</button>
+      <button class="btn btn-secondary" id="clear-cache-btn">
+        Clear Translation Cache
+      </button>
     </div>
     <div id="save-status"></div>
 
@@ -285,7 +416,7 @@
       <div class="card-title">Word Bank</div>
       <div class="wb-toolbar">
         <span class="wb-count" id="wb-count"></span>
-        <div style="display:flex;gap:8px">
+        <div style="display: flex; gap: 8px">
           <button class="btn btn-secondary" id="export-btn">Export CSV</button>
           <button class="btn btn-danger" id="clear-wb-btn">Clear All</button>
         </div>
@@ -301,7 +432,9 @@
             </tr>
           </thead>
           <tbody id="wb-tbody">
-            <tr><td colspan="4" class="empty-wb">Loadingâ€¦</td></tr>
+            <tr>
+              <td colspan="4" class="empty-wb">Loadingâ€¦</td>
+            </tr>
           </tbody>
         </table>
       </div>
