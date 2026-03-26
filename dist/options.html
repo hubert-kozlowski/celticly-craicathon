@@ -417,7 +417,9 @@
       <div class="wb-toolbar">
         <span class="wb-count" id="wb-count"></span>
         <div style="display: flex; gap: 8px">
-          <button class="btn btn-secondary" id="export-btn">Export CSV</button>
+          <button class="btn btn-secondary" id="export-btn">
+            Export Flash Cards
+          </button>
           <button class="btn btn-danger" id="clear-wb-btn">Clear All</button>
         </div>
       </div>
@@ -433,7 +435,39 @@
           </thead>
           <tbody id="wb-tbody">
             <tr>
-              <td colspan="4" class="empty-wb">Loadingâ€¦</td>
+              <td colspan="4" class="empty-wb">Loading…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Blacklist Management -->
+    <div class="card" style="margin-top: 28px">
+      <div class="card-title">Translation Blacklist</div>
+      <p class="field-hint">
+        Translations you've marked as incorrect will not be shown in search
+        results.
+      </p>
+      <div class="wb-toolbar">
+        <span class="wb-count" id="blacklist-count"></span>
+        <button class="btn btn-danger" id="clear-blacklist-btn">
+          Clear All Blacklist
+        </button>
+      </div>
+      <div class="wb-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>English</th>
+              <th>Irish (Avoided)</th>
+              <th>Date</th>
+              <th class="td-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="blacklist-tbody">
+            <tr>
+              <td colspan="4" class="empty-wb">Loading…</td>
             </tr>
           </tbody>
         </table>

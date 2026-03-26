@@ -8,6 +8,7 @@ module.exports = {
     "content-script": "./src/content/content-script.ts",
     "popup": "./src/popup/popup.ts",
     "options": "./src/options/options.ts",
+    "wordbank": "./src/options/wordbank.ts",
   },
   output: {
     path: path.resolve(__dirname, "dist"),
@@ -31,6 +32,8 @@ module.exports = {
       patterns: [
         // Icons into dist/icons/ (already present, keep for asset resolution)
         { from: "icons", to: path.resolve(__dirname, "dist/icons") },
+        // Media files (logos, images) into dist/media/
+        { from: "media", to: path.resolve(__dirname, "dist/media") },
         // Copy manifest.json into dist/, rewriting "dist/foo.js" → "foo.js"
         {
           from: "manifest.json",
@@ -55,9 +58,23 @@ module.exports = {
             return content.toString().replace(/src="dist\//g, 'src="');
           },
         },
+        // Copy wordbank.html into dist/, rewriting src="dist/wordbank.js" → src="wordbank.js"
+        {
+          from: "wordbank.html",
+          to: path.resolve(__dirname, "dist/wordbank.html"),
+          transform(content) {
+            return content.toString().replace(/src="dist\//g, 'src="');
+          },
+        },
       ],
     }),
   ],
   // Service workers must not use eval; use cheap-source-map instead
   devtool: "cheap-source-map",
+  // Suppress webpack performance warnings for extension assets
+  performance: {
+    maxAssetSize: 5000000, // 5MB limit for media assets
+    maxEntrypointSize: 5000000,
+    hints: false, // Disable performance warnings (extension assets are reasonable)
+  },
 };

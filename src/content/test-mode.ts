@@ -39,6 +39,33 @@ function isNodeEligible(node: Node): boolean {
     const style = getComputedStyle(el);
     if (style.position !== "fixed" && style.position !== "sticky") return false;
   }
+  
+  // ─── Enhanced CSS-based visibility checks ───
+  const style = getComputedStyle(el);
+  // Reject if visibility is hidden
+  if (style.visibility === "hidden") return false;
+  // Reject if opacity is too low (nearly transparent)
+  const opacity = parseFloat(style.opacity);
+  if (opacity < 0.01) return false;
+  // Reject if text is clipped by parent overflow:hidden
+  const parent2 = el.parentElement;
+  if (parent2) {
+    const parentStyle = getComputedStyle(parent2);
+    if (parentStyle.overflow === "hidden") {
+      const parentRect = parent2.getBoundingClientRect();
+      const elRect = el.getBoundingClientRect();
+      // Check if element is significantly outside parent bounds
+      if (
+        elRect.left > parentRect.right + 10 ||
+        elRect.right < parentRect.left - 10 ||
+        elRect.top > parentRect.bottom + 10 ||
+        elRect.bottom < parentRect.top - 10
+      ) {
+        return false;
+      }
+    }
+  }
+  
   const rect = el.getBoundingClientRect();
   if (rect.width < 2 || rect.height < 2) return false;
   // Reject elements scrolled out of the document entirely (e.g. overflow:hidden crops)
@@ -62,14 +89,15 @@ export async function startTestMode(
 
   // Translate all candidates in parallel (cache hits are instant)
   const results = await Promise.all(
-    candidates.map(async (word): Promise<[string, string] | null> => {
+    candidates.map(async (word): Promise<[string, string, string | undefined] | null> => {
       try {
         const resp = await sendMessage({ type: "TRANSLATE", text: word });
         if (resp.ok && "result" in resp) {
           const irish = resp.result.irishText.trim();
+          const properNounType = resp.result.properNounType;
           // Skip words where translation equals original (no useful quiz item)
           if (irish.toLowerCase() !== word.toLowerCase() && irish.length > 0) {
-            return [word, irish];
+            return [word, irish, properNounType];
           }
         }
       } catch {
@@ -79,10 +107,10 @@ export async function startTestMode(
     })
   );
 
-  const wordMap = new Map<string, { irish: string }>(
+  const wordMap = new Map<string, { irish: string; properNounType?: string }>(
     results
-      .filter((t): t is [string, string] => t !== null)
-      .map(([word, irish]) => [word, { irish }])
+      .filter((t): t is [string, string, string | undefined] => t !== null)
+      .map(([word, irish, properNounType]) => [word, { irish, properNounType }])
   );
 
   if (wordMap.size === 0) return;
@@ -156,7 +184,7 @@ function shuffleArray<T>(arr: T[]): void {
 
 // ── DOM replacement ────────────────────────────────────────────────────────────
 
-function replaceWordsInDom(wordMap: Map<string, { irish: string }>): void {
+function replaceWordsInDom(wordMap: Map<string, { irish: string; properNounType?: string }>): void {
   const escaped = Array.from(wordMap.keys()).map(escapeRegex);
   const pattern = new RegExp(`\\b(${escaped.join("|")})\\b`, "gi");
 
@@ -196,13 +224,20 @@ function replaceWordsInDom(wordMap: Map<string, { irish: string }>): void {
 
       const entry = wordMap.get(word.toLowerCase());
       const irishText = entry?.irish ?? word;
+      const isProperNoun = entry?.properNounType && entry.properNounType !== "unknown";
       const span = document.createElement("span");
       span.dataset.celticlyTest = "word";
       span.dataset.original = word;
       span.dataset.irish = irishText;
       span.dataset.answered = "false";
+      span.dataset.properNounType = entry?.properNounType;
       span.textContent = irishText;
-      applySpanUnansweredStyle(span);
+      
+      if (isProperNoun) {
+        applySpanProperNounStyle(span);
+      } else {
+        applySpanUnansweredStyle(span);
+      }
 
       span.addEventListener("mouseenter", () => onSpanHover(span));
       span.addEventListener("mouseleave", (e) => onSpanLeave(e));
@@ -226,7 +261,17 @@ function applySpanUnansweredStyle(span: HTMLElement): void {
     "border-radius:3px;" +
     "padding:0 2px;" +
     "cursor:help;" +
-    "transition:background 0.2s;";
+    "transition: background 160ms cubic-bezier(0.2,0.8,0.2,1);";
+}
+
+function applySpanProperNounStyle(span: HTMLElement): void {
+  span.style.cssText =
+    "background:rgba(59,130,246,0.12);" +
+    "border-bottom:2px dashed #3B82F6;" +
+    "border-radius:3px;" +
+    "padding:0 2px;" +
+    "cursor:help;" +
+    "transition: background 160ms cubic-bezier(0.2,0.8,0.2,1);";
 }
 
 function escapeRegex(s: string): string {
@@ -243,12 +288,13 @@ function onSpanHover(span: HTMLElement): void {
   const wrap = document.createElement("div");
   wrap.id = "cf-test-input-wrap";
 
-  // Fixed positioning uses viewport coords — getBoundingClientRect is already viewport-relative
-  const top = rect.bottom + 4;
-  const left = Math.min(rect.left, window.innerWidth - 260);
+  // Absolute positioning: add scroll offset so the input stays anchored to the
+  // word in the DOM even when the page is scrolled.
+  const top = rect.bottom + window.scrollY + 4;
+  const left = Math.min(rect.left + window.scrollX, document.documentElement.scrollWidth - 260);
 
   wrap.style.cssText = [
-    "position:fixed",
+    "position:absolute",
     `top:${top}px`,
     `left:${left}px`,
     "z-index:2147483647",
@@ -291,7 +337,7 @@ function onSpanHover(span: HTMLElement): void {
   hintBtn.style.cssText =
     "background:rgba(22,163,74,0.10);border:1px solid rgba(22,163,74,0.3);" +
     "border-radius:5px;padding:2px 6px;font-size:13px;cursor:pointer;" +
-    "transition:background 0.15s;flex-shrink:0;";
+    "transition: background 140ms cubic-bezier(0.2,0.8,0.2,1);flex-shrink:0;";
   hintBtn.addEventListener("mouseenter", () => {
     hintBtn.style.background = "rgba(22,163,74,0.22)";
   });
@@ -313,6 +359,7 @@ function onSpanHover(span: HTMLElement): void {
 
     const original = span.dataset.original ?? "";
     const irishText = span.dataset.irish ?? "";
+    const properNounType = span.dataset.properNounType ?? "";
 
     if (messageFn) {
       try {
@@ -323,8 +370,20 @@ function onSpanHover(span: HTMLElement): void {
         });
         if (resp.ok && "hints" in resp) {
           const lines: string[] = [];
+          
+          // Add proper noun type badge if applicable
+          if (properNounType && properNounType !== "unknown") {
+            const typeLabel = {
+              place: "📍 Place",
+              person: "👤 Person",
+              brand: "🏢 Brand",
+              organization: "🏛️ Organization",
+            }[properNounType] || properNounType;
+            lines.push(typeLabel);
+          }
+          
           if (resp.hints.length > 0) {
-            lines.push("Similar words: " + resp.hints.join(", "));
+            lines.push(resp.hints.join(", "));
           }
           if (resp.phonetic) {
             lines.push(`🔤 ${resp.phonetic}`);
@@ -409,7 +468,7 @@ function checkAnswer(span: HTMLElement, answer: string): void {
       // Flash green, then fade out entirely
       s.style.cssText =
         "background:rgba(22,163,74,0.28);border-bottom:2px solid #16A34A;" +
-        "border-radius:3px;padding:0 2px;transition:background 0.6s,border-color 0.6s;";
+        "border-radius:3px;padding:0 2px;transition: background 420ms cubic-bezier(0.2,0.8,0.2,1), border-color 420ms cubic-bezier(0.2,0.8,0.2,1);";
       setTimeout(() => {
         s.style.background = "transparent";
         s.style.borderBottomColor = "transparent";
@@ -478,7 +537,7 @@ function injectProgressBar(): void {
   stopBtn.style.cssText =
     "background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.18);" +
     "color:#F2F2F7;border-radius:6px;padding:3px 10px;font-size:12px;" +
-    "cursor:pointer;font-family:inherit;transition:background 0.15s;";
+    "cursor:pointer;font-family:inherit;transition: background 140ms cubic-bezier(0.2,0.8,0.2,1);";
   stopBtn.addEventListener("mouseenter", () => {
     stopBtn.style.background = "rgba(255,255,255,0.22)";
   });
@@ -667,7 +726,7 @@ function showResultsOverlay(
     "font-weight:600",
     "cursor:pointer",
     "font-family:inherit",
-    "transition:background 0.15s",
+    "transition: background 140ms cubic-bezier(0.2,0.8,0.2,1)",
   ].join(";");
   closeBtn.addEventListener("mouseenter", () => {
     closeBtn.style.background = "#15803D";

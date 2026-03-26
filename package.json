@@ -8,7 +8,8 @@
     "dev": "webpack --mode development --watch",
     "lint": "eslint src --ext .ts",
     "type-check": "tsc --noEmit",
-    "package": "npm run build && powershell -Command \"Compress-Archive -Path dist\\* -DestinationPath celticly.zip -Force; Write-Host 'Created celticly.zip — load the dist/ folder in Chrome or share the zip'\""
+    "package": "npm run build && powershell -Command \"Compress-Archive -Path dist\\* -DestinationPath celticly.zip -Force; Write-Host 'Created celticly.zip — load the dist/ folder in Chrome or share the zip'\"",
+    "package:webstore": "npm run build && powershell -Command \"Compress-Archive -Path dist\\* -DestinationPath celticly-webstore.zip -Force; Write-Host 'Created celticly-webstore.zip — upload this zip to the Chrome Web Store (contains only dist/)';\""
   },
   "devDependencies": {
     "@types/chrome": "^0.0.268",

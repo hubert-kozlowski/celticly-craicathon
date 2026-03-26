@@ -63,12 +63,13 @@ function onRuntimeMessage(
   }
   if (message.type === "TRANSLATE_SELECTION" && message.text) {
     const sel = window.getSelection();
-    let x = window.innerWidth / 2;
-    let y = window.innerHeight / 2;
+    let x = window.scrollX + window.innerWidth / 2;
+    let y = window.scrollY + window.innerHeight / 2;
     if (sel && sel.rangeCount > 0) {
       const rect = sel.getRangeAt(0).getBoundingClientRect();
-      x = rect.left + rect.width / 2;
-      y = rect.bottom;
+      // Convert viewport coords to page-absolute coords for position:absolute popup
+      x = rect.left + rect.width / 2 + window.scrollX;
+      y = rect.bottom + window.scrollY;
     }
     triggerTranslation(message.text, x, y);
   }
@@ -114,8 +115,9 @@ function evaluateSelection(mouseX: number, mouseY: number): void {
   if (sel.rangeCount > 0) {
     const rect = sel.getRangeAt(0).getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
-      x = rect.left + rect.width / 2;
-      y = rect.bottom;
+      // Convert viewport coords to page-absolute coords for position:absolute popup
+      x = rect.left + rect.width / 2 + window.scrollX;
+      y = rect.bottom + window.scrollY;
     }
   }
 
@@ -185,6 +187,10 @@ function triggerTranslation(text: string, x: number, y: number, context?: string
           onTranslateWord: (word: string) => {
             triggerTranslation(word, x, y);
           },
+          onRetranslateWithMeaning: (word: string, pos: string) => {
+            // Retranslate the word with POS context to get alternative translation
+            triggerTranslation(word, x, y, `as a ${pos}`);
+          },
           onSpeak: async (irishText: string) => {
             // Strip anything that isn't an English/Irish letter, space, or hyphen
             const cleanText = irishText.replace(/[^a-zA-Z\u00e1\u00e9\u00ed\u00f3\u00fa\u00c1\u00c9\u00cd\u00d3\u00da\s-]/g, '').trim();
@@ -202,16 +208,23 @@ function triggerTranslation(text: string, x: number, y: number, context?: string
             }
             return [];
           },
+          onBlacklistTranslation: async (sourceText: string, irishText: string) => {
+            await sendMessage({
+              type: "BLACKLIST_TRANSLATION",
+              sourceText,
+              irishText,
+            });
+          },
         });
       } else {
         const errMsg = resp.ok ? "Unexpected response" : (resp as { error: string }).error;
-        popup.showError(errMsg, { onSave: async () => {}, onClose: dismissPopup, onTranslateWord: () => {}, onSpeak: async () => {}, onCheckGrammar: async () => [] });
+        popup.showError(errMsg, { onSave: async () => {}, onClose: dismissPopup, onTranslateWord: () => {}, onSpeak: async () => {}, onCheckGrammar: async () => [], onBlacklistTranslation: async () => {} });
       }
     })
     .catch((err: unknown) => {
       if (!popup) return;
       const msg = err instanceof Error ? err.message : String(err);
-      popup.showError(msg, { onSave: async () => {}, onClose: dismissPopup, onTranslateWord: () => {}, onSpeak: async () => {}, onCheckGrammar: async () => [] });
+      popup.showError(msg, { onSave: async () => {}, onClose: dismissPopup, onTranslateWord: () => {}, onSpeak: async () => {}, onCheckGrammar: async () => [], onBlacklistTranslation: async () => {} });
     });
 }
 

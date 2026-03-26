@@ -209,13 +209,25 @@
       .recent-item:hover {
         background: var(--bg-hover);
       }
+      .recent-pair {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 1;
+        min-width: 0;
+      }
       .recent-source {
         font-size: 11px;
         color: var(--text-muted);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 120px;
+        max-width: 80px;
+      }
+      .recent-arrow {
+        color: var(--text-light);
+        font-size: 12px;
+        flex-shrink: 0;
       }
       .recent-irish {
         font-size: 13px;
@@ -224,7 +236,7 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        max-width: 130px;
+        max-width: 100px;
       }
 
       .empty-state {
@@ -319,6 +331,13 @@
     <div class="section" id="recent-section">
       <div class="section-title">Recent saves</div>
       <ul class="recent-list" id="recent-list"></ul>
+      <button
+        class="btn btn-secondary btn-full"
+        id="open-wordbank"
+        style="margin-top: 8px; justify-content: center"
+      >
+        View All Words
+      </button>
     </div>
 
     <div class="section" id="test-section">

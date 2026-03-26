@@ -4,6 +4,7 @@
 import type { ExtensionRequest, ExtensionResponse } from "../lib/messages";
 import type { SavedWord } from "../lib/types";
 import { createProvider } from "../lib/translation-provider";
+import { getWordSuggestions } from "../lib/gaelspell";
 import {
   getSettings,
   saveSettings,
@@ -14,6 +15,8 @@ import {
   setCachedTranslation,
   clearCache,
   generateId,
+  blacklistTranslation,
+  isBlacklisted,
 } from "../lib/storage";
 
 // ── Context menu setup ────────────────────────────────────────────────────────
@@ -110,6 +113,11 @@ async function handleMessage(
     case "CHECK_GRAMMAR":
       return handleCheckGrammar(request.text);
 
+    case "BLACKLIST_TRANSLATION": {
+      await handleBlacklistTranslation(request.sourceText, request.irishText, request.langCode);
+      return { ok: true };
+    }
+
     default:
       return { ok: false, error: "Unknown message type", code: "UNKNOWN" };
   }
@@ -153,13 +161,46 @@ async function handleTranslate(rawText: string, context?: string): Promise<Exten
     contextPromise,
   ]);
 
+  // If the provider returned a translation that the user has explicitly blacklisted,
+  // try to obtain an alternative for single words (similar-word lookup) before returning.
+  if (isWord) {
+    try {
+      const blacklisted = await isBlacklisted(text, TARGET_LANG, result.irishText);
+      if (blacklisted) {
+        // Try to pick an alternative from similar-words database
+        const similar = await provider.fetchSimilarWords(text).catch(() => []);
+        const alternative = (similar || []).map(s => s.irish).find(i => i && i.toLowerCase().trim() !== result.irishText.toLowerCase().trim());
+        if (alternative) {
+          result.irishText = alternative;
+        }
+      }
+    } catch (err) {
+      // Ignore errors in blacklist check — fall back to original translation
+      console.warn("Blacklist check failed:", err);
+    }
+  }
+
   if (contextSentenceIrish) {
     result.contextSentenceIrish = contextSentenceIrish;
   }
 
-  // 3. For single words, look up the grammatical word type from Wiktionary (free, no key).
+  // 3. For single words, look up definitions + word type from Wiktionary.
   if (isWord && !result.sameInBothLanguages) {
-    result.wordType = await provider.fetchWordType(result.irishText).catch(() => null) ?? undefined;
+    const { wordType, definitions } = await provider.fetchWordDefinitions(text).catch(() => ({ wordType: null, definitions: [] }));
+    if (wordType) result.wordType = wordType;
+    if (definitions.length > 0) result.definitions = definitions;
+  }
+
+  // 4. Validate the Irish translation with GaelSpell (cadhan.com).
+  //    Suggestions mean the word may be mis-spelled; surface them as alternatives.
+  //    Non-fatal: if GaelSpell is unavailable the translation is returned as-is.
+  if (isWord && !result.sameInBothLanguages) {
+    try {
+      const suggestions = await getWordSuggestions(result.irishText, 3);
+      if (suggestions.length > 0) result.spellSuggestions = suggestions;
+    } catch {
+      // GaelSpell unavailable — silently ignore
+    }
   }
 
   // 4. Cache the core result (without context sentence, which varies per page)
@@ -214,6 +255,18 @@ async function handleCheckGrammar(text: string): Promise<ExtensionResponse> {
   const errors = await provider.checkGrammar(text);
   return { ok: true, errors };
 }
+
+// ── Rating logic ──────────────────────────────────────────────────────────────
+
+async function handleBlacklistTranslation(
+  sourceText: string,
+  irishText: string,
+  langCode?: string
+): Promise<void> {
+  const lang = langCode || "ga";
+  await blacklistTranslation(sourceText, lang, irishText);
+}
+
 // ── Save word logic ───────────────────────────────────────────────────────────
 
 async function handleSaveWord(

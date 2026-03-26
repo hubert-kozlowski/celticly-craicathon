@@ -2,7 +2,7 @@
 // Renders near the selection, handles all translation states, save action.
 // Light theme by default (Apple / Grammarly-inspired), with a dark variant.
 
-import type { TranslationResult, GrammarError } from "../lib/types";
+import type { TranslationResult, GrammarError, WordDefinition } from "../lib/types";
 
 const POPUP_ID = "celticly-popup-host";
 
@@ -72,10 +72,9 @@ const POPUP_STYLES = `
 
   /* â”€â”€ Base â”€â”€ */
   .cf-popup {
-    position: fixed;
+    position: absolute;
     z-index: 2147483647;
-    max-width: 340px;
-    min-width: 220px;
+    width: 340px;
     background: var(--bg);
     color: var(--text);
     border-radius: var(--radius);
@@ -85,11 +84,16 @@ const POPUP_STYLES = `
     line-height: 1.5;
     padding: 0;
     overflow: hidden;
-    transition: opacity 0.15s ease, transform 0.15s ease;
+    transition: opacity 140ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 160ms cubic-bezier(0.2, 0.9, 0.2, 1), width 220ms cubic-bezier(0.35, 0.46, 0.6, 1);
+    will-change: opacity, transform;
     opacity: 0;
     transform: translateY(6px) scale(0.97);
     pointer-events: all;
     border: 1px solid var(--border);
+  }
+
+  .cf-popup.cf-wide {
+    width: 480px;
   }
 
   .cf-popup.cf-visible {
@@ -126,7 +130,7 @@ const POPUP_STYLES = `
     border-radius: 6px;
     display: flex;
     align-items: center;
-    transition: color 0.1s, background 0.1s;
+    transition: color 120ms cubic-bezier(0.2,0.8,0.2,1), background 120ms cubic-bezier(0.2,0.8,0.2,1);
   }
   .cf-close:hover { color: var(--text); background: var(--chip-bg); }
 
@@ -207,21 +211,23 @@ const POPUP_STYLES = `
   .cf-chip {
     display: inline-flex;
     align-items: center;
-    padding: 3px 9px;
+    padding: 6px 12px;
     background: var(--chip-bg);
     border: 1px solid var(--chip-border);
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 500;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 600;
     color: var(--chip-text);
     cursor: pointer;
-    transition: background 0.12s, color 0.12s, transform 0.08s;
+    transition: background 140ms cubic-bezier(0.2,0.8,0.2,1), color 140ms cubic-bezier(0.2,0.8,0.2,1), transform 140ms cubic-bezier(0.2,0.85,0.2,1), box-shadow 140ms cubic-bezier(0.2,0.8,0.2,1);
+    will-change: transform, opacity;
     user-select: none;
   }
   .cf-chip:hover {
     background: var(--chip-hover);
     color: var(--chip-hover-text);
     transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.06);
   }
   .cf-chip:active { transform: scale(0.95); }
 
@@ -261,6 +267,34 @@ const POPUP_STYLES = `
     padding: 1px 8px;
     font-size: 11px;
     font-weight: 600;
+  }
+
+  .cf-proper-noun-badge {
+    background: rgba(59, 130, 246, 0.12);
+    color: #1e40af;
+    border-radius: 20px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .cf-popup.cf-dark .cf-proper-noun-badge {
+    background: rgba(96, 165, 250, 0.15);
+    color: #93c5fd;
+  }
+
+  .cf-preprocessed-badge {
+    background: rgba(168, 85, 247, 0.12);
+    color: #7e22ce;
+    border-radius: 20px;
+    padding: 1px 8px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .cf-popup.cf-dark .cf-preprocessed-badge {
+    background: rgba(196, 181, 253, 0.15);
+    color: #d8b4fe;
   }
 
   .cf-same-word {
@@ -328,6 +362,9 @@ const POPUP_STYLES = `
     flex-wrap: wrap;
   }
 
+  .cf-actions-left { display: flex; gap: 8px; align-items: center; }
+  .cf-actions-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
   .cf-save-btn {
     background: var(--accent);
     color: var(--accent-fg);
@@ -337,7 +374,7 @@ const POPUP_STYLES = `
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.15s, transform 0.08s, box-shadow 0.15s;
+    transition: background 140ms cubic-bezier(0.2,0.8,0.2,1), transform 120ms cubic-bezier(0.2,0.85,0.2,1), box-shadow 160ms cubic-bezier(0.2,0.8,0.2,1);
     display: flex;
     align-items: center;
     gap: 5px;
@@ -370,7 +407,7 @@ const POPUP_STYLES = `
     justify-content: center;
     color: var(--text-muted);
     border-radius: 6px;
-    transition: color 0.15s, background 0.15s, border-color 0.15s, transform 0.08s;
+    transition: color 140ms cubic-bezier(0.2,0.8,0.2,1), background 140ms cubic-bezier(0.2,0.8,0.2,1), border-color 140ms cubic-bezier(0.2,0.8,0.2,1), transform 120ms cubic-bezier(0.2,0.85,0.2,1);
     flex-shrink: 0;
     line-height: 0;
   }
@@ -392,6 +429,47 @@ const POPUP_STYLES = `
     font-size: 12px;
     color: var(--accent);
     font-weight: 600;
+  }
+
+  /* ── Blacklist button ── */
+  .cf-blacklist-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 6px 10px;
+    cursor: pointer;
+    border-radius: 6px;
+    font-size: 16px;
+    transition: color 140ms cubic-bezier(0.2,0.8,0.2,1), background 140ms cubic-bezier(0.2,0.8,0.2,1), border-color 140ms cubic-bezier(0.2,0.8,0.2,1), transform 120ms cubic-bezier(0.2,0.85,0.2,1), opacity 200ms cubic-bezier(0.2,0.8,0.2,1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+  
+  .cf-blacklist-btn:hover:not(:disabled) {
+    color: #dc2626; /* red */
+    background: rgba(220, 38, 38, 0.08);
+    border-color: #dc2626;
+  }
+  
+  .cf-blacklist-btn:active:not(:disabled) {
+    transform: scale(0.92);
+  }
+  
+  .cf-blacklist-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.08);
+    border-color: #dc2626;
+  }
+  
+  .cf-blacklist-btn.cf-blacklisted {
+    color: #dc2626;
+    background: rgba(220, 38, 38, 0.08);
+    border-color: #dc2626;
   }
 
   /* â”€â”€ Footer â”€â”€ */
@@ -420,7 +498,7 @@ const POPUP_STYLES = `
     font-weight: 500;
     color: var(--text-muted);
     cursor: pointer;
-    transition: background 0.12s, color 0.12s, border-color 0.12s;
+    transition: background 140ms cubic-bezier(0.2,0.8,0.2,1), color 140ms cubic-bezier(0.2,0.8,0.2,1), border-color 140ms cubic-bezier(0.2,0.8,0.2,1);
   }
   .cf-grammar-btn:hover {
     background: var(--accent-subtle);
@@ -471,14 +549,303 @@ const POPUP_STYLES = `
     overflow: hidden;
     text-overflow: ellipsis;
   }
+
+  /* ── Meanings list (multiple definitions from Wiktionary) ── */
+  .cf-meanings {
+    margin-top: 8px;
+    padding: 7px 10px;
+    background: var(--chip-bg);
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-muted);
+  }
+
+  .cf-meanings-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-light);
+    margin-bottom: 4px;
+  }
+
+  .cf-meanings-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .cf-meanings-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .cf-meanings-item:last-child {
+    border-bottom: none;
+  }
+
+  .cf-meanings-header {
+    display: flex;
+    gap: 5px;
+    align-items: baseline;
+  }
+
+  .cf-meanings-pos {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+    min-width: 28px;
+  }
+
+  .cf-meanings-def {
+    color: var(--text-muted);
+    flex: 1;
+    font-size: 12px;
+  }
+
+  .cf-meanings-irish {
+    color: var(--accent);
+    font-weight: 500;
+    font-size: 13px;
+    margin-left: 28px;
+  }
+
+  .cf-meanings-example {
+    color: var(--text-light);
+    font-size: 11px;
+    margin-left: 28px;
+    line-height: 1.4;
+  }
+
+  .cf-meanings-example.cf-example-placeholder {
+    opacity: 0.6;
+    font-style: normal;
+    color: var(--text-muted);
+  }
+
+  .cf-meanings-retranslate {
+    align-self: flex-end;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--accent);
+    border-radius: 3px;
+    padding: 1px 4px;
+    font-size: 10px;
+    cursor: pointer;
+    transition: background 140ms cubic-bezier(0.2,0.8,0.2,1), color 140ms cubic-bezier(0.2,0.8,0.2,1), border-color 140ms cubic-bezier(0.2,0.8,0.2,1);
+    min-width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+  }
+
+  .cf-meanings-retranslate:hover {
+    background: var(--accent-subtle);
+    border-color: var(--accent);
+  }
+
+  .cf-meanings-retranslate:active {
+    opacity: 0.7;
+  }
+
+  /* ── Spell alternatives (GaelSpell corrections) ── */
+  .cf-spell-alts {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-light);
+    font-style: italic;
+  }
+
+  .cf-spell-alts-word {
+    cursor: pointer;
+    color: var(--accent);
+    font-style: normal;
+    font-weight: 500;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+  }
+  .cf-spell-alts-word:hover { color: var(--accent-hover); }
+
+  /* ── Similar words button ── */
+  .cf-similar-words-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s;
+  }
+  .cf-similar-words-btn:hover {
+    background: var(--accent-subtle);
+    color: var(--accent-subtle-text);
+    border-color: var(--accent);
+  }
+  .cf-similar-words-btn:disabled { opacity: 0.45; cursor: default; }
+
+  /* ── Similar words section ── */
+  .cf-similar-words-section {
+    padding: 8px 14px 10px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+  }
+
+  .cf-similar-words-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .cf-similar-word-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    background: var(--accent-subtle);
+    border-radius: 6px;
+    border: 1px solid var(--accent);
+    gap: 8px;
+  }
+
+  .cf-similar-word-text {
+    flex: 1;
+    color: var(--text);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cf-similar-word-irish {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-style: italic;
+    max-width: 60px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cf-similar-words-title {
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+
+  .cf-similar-word-btn {
+    flex-shrink: 0;
+    background: var(--accent);
+    color: var(--accent-fg);
+    border: none;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 140ms cubic-bezier(0.2,0.8,0.2,1), opacity 140ms cubic-bezier(0.2,0.8,0.2,1);
+  }
+  .cf-similar-word-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+  .cf-similar-word-btn:disabled { opacity: 0.6; cursor: default; }
+
+  .cf-info-section {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* ── Expandable sections ── */
+  .cf-expandable {
+    margin-top: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .cf-expandable-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    background: var(--chip-bg);
+    cursor: pointer;
+    transition: background 140ms cubic-bezier(0.2,0.8,0.2,1);
+    user-select: none;
+  }
+  .cf-expandable-header:hover {
+    background: var(--accent-subtle);
+  }
+
+  .cf-expandable-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .cf-expandable-toggle {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    transition: transform 140ms cubic-bezier(0.2,0.85,0.2,1);
+    flex-shrink: 0;
+  }
+
+  .cf-expandable.cf-expanded .cf-expandable-toggle {
+    transform: rotate(180deg);
+  }
+
+  .cf-expandable-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 220ms cubic-bezier(0.2,0.8,0.2,1);
+  }
+
+  .cf-expandable.cf-expanded .cf-expandable-content {
+    max-height: 500px;
+  }
+
+  .cf-expandable-inner {
+    padding: 10px 12px;
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
 `;
 
 export interface PopupCallbacks {
   onSave: (sourceText: string, irishText: string) => Promise<void>;
   onClose: () => void;
   onTranslateWord: (word: string) => void;
+  onRetranslateWithMeaning?: (word: string, pos: string) => void;  // Retranslate with a specific part of speech
   onSpeak: (irishText: string) => Promise<void>;
   onCheckGrammar: (irishText: string) => Promise<GrammarError[]>;
+  onBlacklistTranslation: (sourceText: string, irishText: string) => Promise<void>;  // Blacklist a bad translation
 }
 
 export class TranslationPopup {
@@ -556,7 +923,7 @@ export class TranslationPopup {
     if (!this.host) {
       this.host = document.createElement("div");
       this.host.id = POPUP_ID;
-      this.host.style.cssText = "all: initial; position: fixed; z-index: 2147483647;";
+      this.host.style.cssText = "all: initial; position: absolute; z-index: 2147483647;";
       this.shadow = this.host.attachShadow({ mode: "closed" });
 
       const style = document.createElement("style");
@@ -578,16 +945,21 @@ export class TranslationPopup {
     if (!this.host) return;
 
     const margin = 12;
-    // Use actual rendered dimensions when available; fall back to generous estimates
-    const popupW = this.popupEl?.offsetWidth || 340;
+    // Use actual rendered dimensions when available; fall back to estimates
+    // Default 340px, or 480px if wide mode
+    const estimatedWidth = this.popupEl?.classList.contains("cf-wide") ? 480 : 340;
+    const popupW = this.popupEl?.offsetWidth || estimatedWidth;
     const popupH = this.popupEl?.offsetHeight || 340;
+
+    const pageW = document.documentElement.scrollWidth;
+    const pageH = document.documentElement.scrollHeight;
 
     let left = x - popupW / 2;
     let top = y + margin;
 
-    if (left + popupW > window.innerWidth - margin) left = window.innerWidth - popupW - margin;
+    if (left + popupW > pageW - margin) left = pageW - popupW - margin;
     if (left < margin) left = margin;
-    if (top + popupH > window.innerHeight - margin) top = y - popupH - margin;
+    if (top + popupH > pageH - margin) top = y - popupH - margin;
     if (top < margin) top = margin;
 
     this.host.style.left = `${left}px`;
@@ -620,6 +992,7 @@ export class TranslationPopup {
 
   private renderLoading(): void {
     if (!this.popupEl) return;
+    this.popupEl.classList.remove("cf-wide");
     this.popupEl.innerHTML = `
       <div class="cf-header">
         <span class="cf-brand">Celticly</span>
@@ -657,17 +1030,39 @@ export class TranslationPopup {
       : "";
 
     // Word-type badge (single words only; from Wiktionary)
-    const metaHtml = (isWord && result.wordType)
-      ? `<div class="cf-meta"><span class="cf-word-type-badge">${escapeHtml(result.wordType)}</span></div>`
+    const wordTypeBadge = (isWord && result.wordType)
+      ? `<span class="cf-word-type-badge">${escapeHtml(result.wordType)}</span>`
+      : "";
+    
+    // Proper noun type badge with SVG icons
+    const properNounLabels = {
+      place: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>', label: 'Place' },
+      person: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>', label: 'Person' },
+      brand: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7v-2a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>', label: 'Brand' },
+      organization: { icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>', label: 'Organization' }
+    };
+    const properNounBadge = result.properNounType && result.properNounType !== "unknown"
+      ? `<span class="cf-proper-noun-badge" data-type="${result.properNounType}">
+          ${properNounLabels[result.properNounType]?.icon || ''} ${properNounLabels[result.properNounType]?.label || result.properNounType}
+        </span>`
+      : "";
+    
+    // Preprocessing badge (indicates numbers/dates were converted)
+    const preproccBadge = result.isPreprocessed
+      ? `<span class="cf-preprocessed-badge" title="Numbers and dates converted to words"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/><text x="12" y="16" text-anchor="middle" font-size="12" fill="white" font-weight="bold">i</text></svg> Preprocessed</span>`
+      : "";
+    
+    const metaHtml = (wordTypeBadge || properNounBadge || preproccBadge)
+      ? `<div class="cf-meta">${wordTypeBadge}${properNounBadge}${preproccBadge}</div>`
       : "";
 
     // Note shown when the word has the same spelling in Irish
     const sameWordHtml = result.sameInBothLanguages
-      ? `<div class="cf-same-word">&#x2139; Same spelling in Irish</div>`
+      ? `<div class="cf-same-word"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> Same spelling in Irish</div>`
       : "";
 
     const truncatedNote = truncated
-      ? `<div class="cf-truncated-note">&#x26A0; Only the first 500 characters were translated.</div>`
+      ? `<div class="cf-truncated-note"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3.05h16.94a2 2 0 0 0 1.71-3.05L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Only the first 500 characters were translated.</div>`
       : "";
 
     const cachedNote = result.fromCache
@@ -678,10 +1073,147 @@ export class TranslationPopup {
     const saveAreaHtml = isWord
       ? `<button class="cf-save-btn"><span>+</span> Save to Word Bank</button>`
       : `<span class="cf-no-save">Select a single word to save to Word Bank</span>`;
+
+    // Blacklist button (downvote/report bad translation) -- for single words only
+    const thumbDownOutline = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14v6a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2v-6"/><path d="M21 10h-6l1-5-4.5 0.5"/><path d="M7 10V5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></svg>`;
+    const thumbDownFilled = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="0" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14v6a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2v-6h-7z"/><path d="M21 10h-6l1-5-4.5.5V10h9z"/><path d="M7 10V5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3V10z"></svg>`;
+    const isBlacklisted = result.userRating === -1 || result.isBlacklisted === true;
+    const blacklistIcon = isBlacklisted ? thumbDownFilled : thumbDownOutline;
+    const blacklistButtonHtml = isWord
+      ? `<button class="cf-blacklist-btn ${isBlacklisted ? "cf-blacklisted" : ""}" 
+               title="Report this translation as incorrect" 
+               aria-pressed="${isBlacklisted ? "true" : "false"}" 
+               ${isBlacklisted ? "disabled" : ""}>${blacklistIcon}</button>`
+      : "";
     const speakSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`;
     const speakHtml = isWord
       ? `<button class="cf-speak-btn" title="Hear Irish pronunciation">${speakSvg}</button>`
       : "";
+    // Phonetic spelling (greyed out, minimal text)
+    const phoneticHtml = result.phoneticSpelling
+      ? `<div class="cf-phonetic">${escapeHtml(result.phoneticSpelling)}</div>`
+      : "";
+
+    // Helper: deduplicate definitions and generate example text if missing
+    const deduplicateDefinitions = (defs: WordDefinition[]): WordDefinition[] => {
+      if (!defs || defs.length <= 1) return defs || [];
+      const seen = new Set<string>();
+      return defs.filter(d => {
+        // Normalize for dedup: first 40 chars, alphanumeric only
+        const norm = d.definition.toLowerCase().substring(0, 40).replace(/[^a-z0-9\s]/g, "");
+        if (seen.has(norm)) return false;
+        seen.add(norm);
+        return true;
+      });
+    };
+
+    const generateExampleText = (word: string, pos: string): string => {
+      // Generate a simple "ghost text" example showing word usage pattern
+      const examples: Record<string, string[]> = {
+        noun: [
+          `The ${word} was essential.`,
+          `I found a ${word}.`,
+          `This ${word} is important.`,
+        ],
+        verb: [
+          `He will ${word} tomorrow.`,
+          `They ${word} every day.`,
+          `We need to ${word} this.`,
+        ],
+        adjective: [
+          `That is very ${word}.`,
+          `The ${word} result was clear.`,
+          `This seems ${word}.`,
+        ],
+        adverb: [
+          `Done ${word}.`,
+          `Very ${word} speaking.`,
+          `He acted ${word}.`,
+        ],
+      };
+      const posKey = pos.toLowerCase().includes("verb") ? "verb" : 
+                     pos.toLowerCase().includes("adj") ? "adjective" :
+                     pos.toLowerCase().includes("adv") ? "adverb" : "noun";
+      const list = examples[posKey] || examples.noun;
+      return list[Math.floor(Math.random() * list.length)];
+    };
+
+    const deduped = deduplicateDefinitions(result.definitions || []);
+    const definitionsWithExamples = deduped.map(d => ({
+      ...d,
+      // English example (from Wiktionary) or generated placeholder
+      exampleEn: d.example || generateExampleText(result.sourceText, d.pos),
+      // Irish meaning if provided by provider/Wiktionary
+      exampleGa: d.irishMeaning || "",
+    }));
+
+    // Multiple meanings (from Wiktionary, single words only)
+    const meaningsHtml = (isWord && definitionsWithExamples.length > 0)
+      ? `<div class="cf-meanings">
+           <span class="cf-meanings-label">Meanings</span>
+           <ul class="cf-meanings-list">
+             ${definitionsWithExamples.map((d, idx) =>
+               `<li class="cf-meanings-item" data-pos="${escapeHtml(d.pos)}" data-idx="${idx}">
+                 <div class="cf-meanings-header">
+                   <span class="cf-meanings-pos">${escapeHtml(d.pos.slice(0, 4))}</span>
+                   <span class="cf-meanings-def">${escapeHtml(d.definition)}</span>
+                 </div>
+                 ${d.irishMeaning ? `<div class="cf-meanings-irish">${escapeHtml(d.irishMeaning)}</div>` : ""}
+                 <div class="cf-meanings-example">
+                   ${d.exampleGa ? `<div class="cf-example-ga">${escapeHtml(d.exampleGa)}</div>` : ""}
+                   ${d.exampleEn ? `<div class="cf-example-en">${escapeHtml(d.exampleEn)}</div>` : ""}
+                 </div>
+                 <button class="cf-meanings-retranslate" title="Retranslate as ${escapeHtml(d.pos)}">↻</button>
+               </li>`
+             ).join("")}
+           </ul>
+         </div>`
+      : "";
+
+    // GaelSpell alternatives (if Irish translation has a better spelling)
+    const spellAltsHtml = (result.spellSuggestions && result.spellSuggestions.length > 0)
+      ? `<div class="cf-spell-alts">Also: ${result.spellSuggestions
+           .map(s => `<span class="cf-spell-alts-word" data-word="${escapeHtml(s)}">${escapeHtml(s)}</span>`)
+           .join(" · ")}</div>`
+      : "";
+
+    // Check if there's enough content to warrant an expandable section:
+    // Show expandable for: multiple genuinely different meanings (3+) OR a phrase that needs word breakdown
+    const hasManyMeanings = definitionsWithExamples.length >= 3;
+    const isPhrase = result.sourceText.includes(" ");
+    const hasExpandable = hasManyMeanings || isPhrase;
+
+    // Separate content: some always visible, some in expandable
+    const defaultContent = `
+      ${phoneticHtml}
+      ${metaHtml}
+      ${contextHtml}
+      ${spellAltsHtml}
+      ${sameWordHtml}
+      ${truncatedNote}
+    `;
+
+    const expandableInnerHtml = `
+      ${hasManyMeanings ? meaningsHtml : ""}
+      ${isPhrase ? wordChipsHtml : ""}
+      ${!hasManyMeanings ? meaningsHtml : ""}
+      <div class="cf-similar-words-placeholder" data-parent="expandable-inner"></div>
+    `.trim();
+
+    const expandableHtml = hasExpandable
+      ? `<div class="cf-expandable">
+           <div class="cf-expandable-header">
+             <span class="cf-expandable-title">${hasManyMeanings && isPhrase ? "More options" : hasManyMeanings ? "All meanings" : "Words in phrase"}</span>
+             <div class="cf-expandable-toggle">▼</div>
+           </div>
+           <div class="cf-expandable-content">
+             <div class="cf-expandable-inner">
+               ${expandableInnerHtml}
+             </div>
+           </div>
+         </div>`
+      : `<div>${meaningsHtml}</div>`;
+
     this.popupEl.innerHTML = `
       <div class="cf-header">
         <span class="cf-brand">Celticly</span>
@@ -693,21 +1225,33 @@ export class TranslationPopup {
           <div class="cf-irish">${irishEscaped}</div>
           ${speakHtml}
         </div>
-        ${sameWordHtml}
-        ${metaHtml}
-        ${contextHtml}
-        ${wordChipsHtml}
-        ${truncatedNote}
+        <div class="cf-info-section">
+          ${defaultContent}
+        </div>
+        ${expandableHtml}
       </div>
       <div class="cf-actions">
-        ${saveAreaHtml}
-        <button class="cf-grammar-btn">Check Irish Grammar</button>
+        <div class="cf-actions-left">${saveAreaHtml}</div>
+        <div class="cf-actions-right">${blacklistButtonHtml}</div>
       </div>
-      <div class="cf-grammar-section" style="display:none;"></div>
       ${cachedNote}`;
+
+    // Apply wide mode if there are multiple meanings (3+ definitions make it wider for better layout)
+    if (definitionsWithExamples.length >= 3) {
+      this.popupEl.classList.add("cf-wide");
+    } else {
+      this.popupEl.classList.remove("cf-wide");
+    }
 
     // Close
     this.popupEl.querySelector(".cf-close")?.addEventListener("click", () => callbacks.onClose());
+
+    // Toggle expandable section
+    const expandableEl = this.popupEl.querySelector<HTMLElement>(".cf-expandable");
+    const expandableHeader = expandableEl?.querySelector<HTMLElement>(".cf-expandable-header");
+    expandableHeader?.addEventListener("click", () => {
+      expandableEl?.classList.toggle("cf-expanded");
+    });
 
     // Save (single words only)
     if (isWord) {
@@ -722,7 +1266,10 @@ export class TranslationPopup {
             const actionsEl = this.popupEl.querySelector(".cf-actions");
             if (actionsEl) actionsEl.innerHTML = `<span class="cf-saved-ok">&#x2713; Saved to Word Bank!</span>`;
           }
-        } catch {
+        } catch (err) {
+          // Show an error message to the user and restore the save button state
+          const message = err instanceof Error ? err.message : String(err ?? "Failed to save word");
+          this.showError(message, callbacks);
           saveBtn.disabled = false;
           saveBtn.innerHTML = `<span>+</span> Save to Word Bank`;
         }
@@ -737,6 +1284,25 @@ export class TranslationPopup {
       });
     });
 
+    // Spell-alternative clicks (GaelSpell corrections)
+    this.popupEl.querySelectorAll<HTMLElement>(".cf-spell-alts-word").forEach((span) => {
+      span.addEventListener("click", () => {
+        const word = span.dataset.word ?? "";
+        if (word) callbacks.onTranslateWord(word);
+      });
+    });
+
+    // Retranslate with specific meaning/POS (from meanings list)
+    this.popupEl.querySelectorAll<HTMLElement>(".cf-meanings-retranslate").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const item = btn.closest(".cf-meanings-item") as HTMLElement | null;
+        const pos = item?.dataset.pos ?? "";
+        if (pos && callbacks.onRetranslateWithMeaning) {
+          callbacks.onRetranslateWithMeaning(result.sourceText, pos);
+        }
+      });
+    });
+
     // Speak button (single words)
     if (isWord) {
       const speakBtn = this.popupEl.querySelector<HTMLButtonElement>(".cf-speak-btn");
@@ -747,8 +1313,9 @@ export class TranslationPopup {
         speakBtn.innerHTML = `<div class="cf-spinner" style="width:12px;height:12px;border-width:1.5px;"></div>`;
         try {
           await callbacks.onSpeak(result.irishText);
-        } catch {
-          // silently ignore; button restores regardless
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err ?? "Failed to play pronunciation");
+          this.showError(message, callbacks);
         } finally {
           speakBtn.disabled = false;
           speakBtn.innerHTML = origContent;
@@ -756,37 +1323,66 @@ export class TranslationPopup {
       });
     }
 
-    // Grammar check button
-    const grammarBtn = this.popupEl.querySelector<HTMLButtonElement>(".cf-grammar-btn");
-    const grammarSection = this.popupEl.querySelector<HTMLElement>(".cf-grammar-section");
-    grammarBtn?.addEventListener("click", async () => {
-      if (!grammarBtn || !grammarSection) return;
-      this.clearAutoDismiss();
-      grammarBtn.disabled = true;
-      grammarSection.style.display = "block";
-      grammarSection.innerHTML = `<div class="cf-loading"><div class="cf-spinner"></div><span>Checking grammar…</span></div>`;
-      try {
-        const errors = await callbacks.onCheckGrammar(result.irishText);
-        grammarBtn.style.display = "none";
-        if (errors.length === 0) {
-          grammarSection.innerHTML = `<div class="cf-grammar-ok">&#x2713; No grammar issues found</div>`;
-        } else {
-          grammarSection.innerHTML = errors
-            .map(
-              (e) =>
-                `<div class="cf-grammar-error">
-                  <span class="cf-grammar-errortext">${escapeHtml(e.errortext)}</span>
-                  <span class="cf-grammar-msg">${escapeHtml(e.msg)}</span>
-                  <span class="cf-grammar-ctx">${escapeHtml(e.context)}</span>
-                 </div>`
-            )
-            .join("");
-        }
-      } catch {
-        grammarSection.innerHTML = `<div class="cf-grammar-ok">Could not check grammar. Try again later.</div>`;
-        grammarBtn.disabled = false;
+    // Fetch and render similar words (single words only)
+    if (isWord && result.similarWords && result.similarWords.length > 0) {
+      const placeholder = this.popupEl.querySelector<HTMLElement>(
+        ".cf-similar-words-placeholder"
+      );
+      if (placeholder) {
+        const similarWordsHtml = `
+          <div class="cf-similar-words-section">
+            <div class="cf-similar-words-title">Similar words</div>
+            <div class="cf-similar-words-list">
+              ${result.similarWords
+                .map(
+                  (sw) => `
+                <div class="cf-similar-word-item">
+                  <span class="cf-similar-word-text">${escapeHtml(sw.word)}</span>
+                  <span class="cf-similar-word-irish">${escapeHtml(sw.irish)}</span>
+                  <button class="cf-similar-word-btn" data-word="${escapeHtml(sw.word)}" title="Translate">→</button>
+                </div>
+              `
+                )
+                .join("")}
+            </div>
+          </div>
+        `;
+        placeholder.innerHTML = similarWordsHtml;
+
+        // Wire up similar word translate buttons
+        placeholder.querySelectorAll<HTMLButtonElement>(".cf-similar-word-btn").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const word = btn.dataset.word ?? "";
+            if (word) callbacks.onTranslateWord(word);
+          });
+        });
       }
-    });
+    }
+
+    // Blacklist button handler
+    if (isWord) {
+      const blacklistBtn = this.popupEl.querySelector<HTMLButtonElement>(".cf-blacklist-btn");
+      if (blacklistBtn) {
+        blacklistBtn.addEventListener("click", async () => {
+          if (blacklistBtn.disabled) return;
+
+          // Disable button and add visual feedback
+          blacklistBtn.disabled = true;
+          blacklistBtn.classList.add("cf-blacklisted");
+
+          try {
+            // Submit blacklist request
+            await callbacks.onBlacklistTranslation(result.sourceText, result.irishText);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err ?? "Failed to report translation");
+            this.showError(message, callbacks);
+            // Re-enable button on failure
+            blacklistBtn.disabled = false;
+            blacklistBtn.classList.remove("cf-blacklisted");
+          }
+        });
+      }
+    }
   }
 
   private buildWordChips(text: string): string {
@@ -811,6 +1407,7 @@ export class TranslationPopup {
 
   private renderError(message: string, onClose: () => void): void {
     if (!this.popupEl) return;
+    this.popupEl.classList.remove("cf-wide");
 
     const isNoKey =
       message.toLowerCase().includes("no api key") || message.includes("NO_API_KEY");

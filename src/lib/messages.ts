@@ -63,6 +63,13 @@ export interface CheckGrammarRequest {
   text: string;
 }
 
+export interface BlacklistTranslationRequest {
+  type: "BLACKLIST_TRANSLATION";
+  sourceText: string;
+  irishText: string;
+  langCode?: string;  // optional: language code for the translation
+}
+
 export type ExtensionRequest =
   | TranslateRequest
   | SaveWordRequest
@@ -73,7 +80,8 @@ export type ExtensionRequest =
   | ClearCacheRequest
   | SpeakWordRequest
   | GetHintRequest
-  | CheckGrammarRequest;
+  | CheckGrammarRequest
+  | BlacklistTranslationRequest;
 
 // ── Inbound: service worker → content script ───────────────────────────────
 

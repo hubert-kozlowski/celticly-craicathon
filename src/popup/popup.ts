@@ -32,12 +32,21 @@ async function init(): Promise<void> {
   const wordCount = document.getElementById("word-count")!;
   const recentList = document.getElementById("recent-list")!;
   const openOptions = document.getElementById("open-options")!;
+  const openWordBank = document.getElementById("open-wordbank") as HTMLButtonElement | null;
 
   const openOptionsPage = (e: Event): void => {
     e.preventDefault();
     chrome.runtime.openOptionsPage();
   };
   openOptions.addEventListener("click", openOptionsPage);
+
+  // Open word bank page
+  if (openWordBank) {
+    openWordBank.addEventListener("click", () => {
+      const wordBankUrl = chrome.runtime.getURL("wordbank.html");
+      chrome.tabs.create({ url: wordBankUrl });
+    });
+  }
 
   // Load settings & apply theme
   const settingsResp = await sendMsg({ type: "GET_SETTINGS" });
@@ -90,9 +99,10 @@ async function init(): Promise<void> {
         .map(
           (w) => `
           <li class="recent-item">
-            <div>
-              <div class="recent-source">${escapeHtml(w.sourceText)}</div>
-              <div class="recent-irish">${escapeHtml(w.irishText)}</div>
+            <div class="recent-pair">
+              <span class="recent-irish">${escapeHtml(w.irishText)}</span>
+              <span class="recent-arrow">→</span>
+              <span class="recent-source">${escapeHtml(w.sourceText)}</span>
             </div>
           </li>`
         )

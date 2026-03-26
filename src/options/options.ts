@@ -39,8 +39,12 @@ const wbTbody = document.getElementById("wb-tbody")!;
 const wbCount = document.getElementById("wb-count")!;
 const exportBtn = document.getElementById("export-btn") as HTMLButtonElement;
 const clearWbBtn = document.getElementById("clear-wb-btn") as HTMLButtonElement;
+const blacklistTbody = document.getElementById("blacklist-tbody");
+const blacklistCount = document.getElementById("blacklist-count");
+const clearBlacklistBtn = document.getElementById("clear-blacklist-btn") as HTMLButtonElement | null;
 
 let loadedWords: SavedWord[] = [];
+let loadedBlacklist: Array<{ key: string; text: string; irishText: string; lang: string; timestamp: number }> = [];
 
 async function loadSettings(): Promise<void> {
   const resp = await sendMsg({ type: "GET_SETTINGS" });
@@ -59,6 +63,77 @@ async function loadWords(): Promise<void> {
     loadedWords = resp.words as SavedWord[];
     renderWords();
   }
+}
+
+async function loadBlacklist(): Promise<void> {
+  // Query the blacklist from IndexedDB
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const req = indexedDB.open("celticly", 3);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+
+  const tx = db.transaction("translation_blacklist", "readonly");
+  const store = tx.objectStore("translation_blacklist");
+  
+  return new Promise((resolve, reject) => {
+    const req = store.getAll();
+    req.onsuccess = () => {
+      loadedBlacklist = (req.result || []) as Array<{ key: string; text: string; irishText: string; lang: string; timestamp: number }>;
+      renderBlacklist();
+      resolve();
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function renderBlacklist(): void {
+  if (!blacklistTbody || !blacklistCount) return; // Elements don't exist
+
+  blacklistCount.textContent = `${loadedBlacklist.length} translation${loadedBlacklist.length !== 1 ? "s" : ""} blacklisted`;
+
+  if (loadedBlacklist.length === 0) {
+    blacklistTbody.innerHTML = `<tr><td colspan="3" class="empty-wb">No blacklisted translations yet.</td></tr>`;
+    return;
+  }
+
+  blacklistTbody.innerHTML = loadedBlacklist
+    .sort((a, b) => b.timestamp - a.timestamp) // Newest first
+    .map(
+      (entry) => `
+      <tr data-key="${escapeHtml(entry.key)}">
+        <td title="${escapeHtml(entry.text)}">${escapeHtml(entry.text)}</td>
+        <td title="${escapeHtml(entry.irishText)}">${escapeHtml(entry.irishText)}</td>
+        <td><small>${escapeHtml(formatDate(entry.timestamp))}</small></td>
+        <td class="td-actions">
+          <button class="delete-blacklist-btn" data-key="${escapeHtml(entry.key)}" title="Remove from blacklist">✕</button>
+        </td>
+      </tr>`
+    )
+    .join("");
+
+  blacklistTbody.querySelectorAll(".delete-blacklist-btn").forEach((btn) =>
+    btn.addEventListener("click", async () => {
+      const key = (btn as HTMLElement).dataset.key ?? "";
+      if (!key) return;
+      
+      // Remove from IndexedDB
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const req = indexedDB.open("celticly", 3);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+
+      const tx = db.transaction("translation_blacklist", "readwrite");
+      const store = tx.objectStore("translation_blacklist");
+      store.delete(key);
+      
+      tx.oncomplete = () => {
+        loadedBlacklist = loadedBlacklist.filter((e) => e.key !== key);
+        renderBlacklist();
+      };
+    })
+  );
 }
 
 function renderWords(): void {
@@ -126,21 +201,52 @@ clearWbBtn.addEventListener("click", async () => {
 
 exportBtn.addEventListener("click", () => {
   if (loadedWords.length === 0) return;
-  const header = "English,Irish,Saved At,Page URL\n";
-  const rows = loadedWords
-    .map(
-      (w) =>
-        `"${w.sourceText.replace(/"/g, '""')}","${w.irishText.replace(/"/g, '""')}","${formatDate(w.savedAt)}","${w.pageUrl.replace(/"/g, '""')}"`
-    )
-    .join("\n");
-  const blob = new Blob([header + rows], { type: "text/csv" });
+  const flashCards = {
+    version: "1.0",
+    exportedAt: new Date().toISOString(),
+    language: "Irish",
+    cards: loadedWords.map((w) => ({
+      front: w.sourceText,
+      back: w.irishText,
+      savedAt: w.savedAt,
+      pageUrl: w.pageUrl,
+    })),
+  };
+  const blob = new Blob([JSON.stringify(flashCards, null, 2)], {
+    type: "application/json",
+  });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `celticly-wordbank-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `celticly-flashcards-${new Date().toISOString().slice(0, 10)}.json`;
   a.click();
   URL.revokeObjectURL(url);
 });
 
+if (clearBlacklistBtn) {
+  clearBlacklistBtn.addEventListener("click", async () => {
+    if (loadedBlacklist.length === 0) return;
+    if (!confirm(`Remove all ${loadedBlacklist.length} blacklisted translations? This cannot be undone.`)) return;
+    
+    // Clear blacklist from IndexedDB
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open("celticly", 3);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+
+    const tx = db.transaction("translation_blacklist", "readwrite");
+    const store = tx.objectStore("translation_blacklist");
+    store.clear();
+    
+    tx.oncomplete = () => {
+      loadedBlacklist = [];
+      renderBlacklist();
+      saveStatus.textContent = "\u2713 Blacklist cleared.";
+      setTimeout(() => { saveStatus.textContent = ""; }, 3000);
+    };
+  });
+}
+
 // Init
-Promise.all([loadSettings(), loadWords()]).catch(console.error);
+Promise.all([loadSettings(), loadWords(), loadBlacklist()]).catch(console.error);

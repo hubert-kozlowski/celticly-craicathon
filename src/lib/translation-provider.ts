@@ -6,13 +6,18 @@
 // To swap providers: implement the TranslationProvider interface and update
 // createProvider() below.
 
-import type { TranslationResult, GrammarError } from "./types";
+import type { TranslationResult, GrammarError, WordDefinition } from "./types";
 import { PROXY_BASE_URL } from "./config";
+import { preprocessText } from "./text-preprocess";
+import { detectProperNoun } from "./proper-noun-detector";
+import { getWordNetGaeilge } from "./wordnet-gaeilge";
 
 export interface TranslationProvider {
   translate(text: string, targetLang: string): Promise<TranslationResult>;
   translateRaw(text: string, targetLang: string): Promise<string>;
   fetchWordType(irishWord: string): Promise<string | null>;
+  fetchWordDefinitions(englishWord: string): Promise<{ wordType: string | null; definitions: WordDefinition[] }>;
+  fetchSimilarWords(englishWord: string): Promise<Array<{ word: string; irish: string }>>;
   generateLocalHints(sourceWord: string): { hints: string[] };
   checkGrammar(text: string): Promise<GrammarError[]>;
   synthesizeSpeech(text: string, langCode: string): Promise<string>;
@@ -40,14 +45,37 @@ export class GoogleTranslationProvider implements TranslationProvider {
 
   /** Core translate call – returns a full TranslationResult. */
   async translate(text: string, targetLang: string): Promise<TranslationResult> {
-    const translated = await this.translateRaw(text, targetLang);
+    // Step 1: Preprocess text (numbers → words, month names)
+    const { preprocessed, hasChanges } = preprocessText(text);
+    
+    // Step 2: Translate the (potentially preprocessed) text
+    const translated = await this.translateRaw(preprocessed, targetLang);
+    
+    // Step 3: Detect if this is a proper noun (place, person, etc.)
+    const properNoun = await detectProperNoun(text);
+    
+    // Step 4: For single words, fetch similar words from WordNet-Gaeilge
+    let similarWords: Array<{ word: string; irish: string }> = [];
+    const isWord = !text.includes(" ");
+    if (isWord) {
+      try {
+        similarWords = await this.fetchSimilarWords(text);
+      } catch {
+        // Gracefully handle similar words fetch failure
+        similarWords = [];
+      }
+    }
+    
     return {
       sourceText: text,
       irishText: translated,
       sameInBothLanguages: translated.toLowerCase().trim() === text.toLowerCase().trim(),
-      isWord: !text.includes(" "),
+      isWord,
+      isPreprocessed: hasChanges,
+      properNounType: properNoun.isProperNoun ? properNoun.type : undefined,
       provider: "google",
       fromCache: false,
+      similarWords: similarWords.length > 0 ? similarWords : undefined,
     };
   }
 
@@ -89,21 +117,125 @@ export class GoogleTranslationProvider implements TranslationProvider {
    * Wiktionary REST API. Returns null if the word is not found or on failure.
    */
   async fetchWordType(irishWord: string): Promise<string | null> {
+    return (await this.fetchWordDefinitions(irishWord).catch(() => ({ wordType: null, definitions: [] }))).wordType;
+  }
+
+  /**
+   * Fetch multiple English definitions and part-of-speech for an English word
+   * from Wiktionary. Returns up to 4 senses across all parts of speech.
+   * Definitions have HTML stripped. Falls back gracefully on any error.
+   * 
+   * ENHANCEMENT OPPORTUNITY: Enrich definitions with:
+   * - irishMeaning: Translation of this specific sense (can fetch from cadhan.com)
+   * - example: Simple example sentence showing typical usage
+   * 
+   * Example via cadhan.com (Irish-English dictionary):
+   * GET https://cadhan.com/api/entries/{word}
+   * Returns Irish translations and usage examples for each sense.
+   */
+  async fetchWordDefinitions(englishWord: string): Promise<{ wordType: string | null; definitions: WordDefinition[] }> {
     try {
-      const url = `${WIKTIONARY_ENDPOINT}/${encodeURIComponent(irishWord.toLowerCase())}`;
+      const url = `${WIKTIONARY_ENDPOINT}/${encodeURIComponent(englishWord.toLowerCase())}`;
       const resp = await fetch(url, {
         headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(3000),
+        signal: AbortSignal.timeout(4000),
       });
-      if (!resp.ok) return null;
-      const data = (await resp.json()) as Record<string, Array<{ partOfSpeech?: string }>>;
-      const gaSection = data["ga"];
-      if (Array.isArray(gaSection) && gaSection.length > 0 && gaSection[0].partOfSpeech) {
-        return gaSection[0].partOfSpeech.toLowerCase();
+      if (!resp.ok) return { wordType: null, definitions: [] };
+
+      const data = (await resp.json()) as Record<string, Array<{
+        partOfSpeech?: string;
+        definitions?: Array<{ definition?: string }>;
+      }>>;
+
+      // Prefer the English ("en") section
+      const enSection = data["en"];
+      if (!Array.isArray(enSection) || enSection.length === 0) {
+        return { wordType: null, definitions: [] };
       }
-      return null;
+
+      const stripHtml = (s: string) =>
+        s.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').trim();
+
+      const definitions: WordDefinition[] = [];
+      let wordType: string | null = null;
+
+      for (const group of enSection) {
+        const pos = group.partOfSpeech?.toLowerCase() ?? "";
+        if (!wordType && pos) wordType = pos;
+        if (!Array.isArray(group.definitions)) continue;
+        for (const def of group.definitions) {
+          const text = def.definition ? stripHtml(def.definition) : "";
+          if (!text) continue;
+          definitions.push({ pos, definition: text });
+          if (definitions.length >= 4) break;
+        }
+        if (definitions.length >= 4) break;
+      }
+
+      // Attempt to provide Irish translations for each sense by translating
+      // the English definition into Irish when an Irish sense isn't available
+      // from the upstream source. This improves bilingual display in the UI.
+      try {
+        const defsWithIrish = await Promise.all(
+          definitions.map(async (d) => {
+            try {
+              const irish = await this.translateRaw(d.definition, "ga");
+              return { ...d, irishMeaning: irish } as WordDefinition;
+            } catch {
+              return d;
+            }
+          })
+        );
+        return { wordType, definitions: defsWithIrish };
+      } catch {
+        return { wordType, definitions };
+      }
     } catch {
-      return null;
+      return { wordType: null, definitions: [] };
+    }
+  }
+
+  /**
+   * Helper to deduplicate definitions that are too similar.
+   * Only keeps definitions that represent genuinely different usage contexts.
+   * Removes near-duplicate meanings to keep the UI clean.
+   */
+  private deduplicateDefinitions(definitions: WordDefinition[]): WordDefinition[] {
+    if (definitions.length <= 1) return definitions;
+
+    const kept: WordDefinition[] = [];
+    const seenPhrases = new Set<string>();
+
+    for (const def of definitions) {
+      // Normalize for comparison: lowercase, first 40 chars, alphanumeric only
+      const normalized = def.definition
+        .toLowerCase()
+        .substring(0, 40)
+        .replace(/[^a-z0-9\s]/g, "");
+
+      // Skip if we've seen a very similar definition
+      if (seenPhrases.has(normalized)) continue;
+
+      seenPhrases.add(normalized);
+      kept.push(def);
+    }
+
+    return kept;
+  }
+
+  /**
+   * Fetch semantically similar English words using WordNet-Gaeilge.
+   * Returns up to 5 similar words with their Irish translations.
+   * Falls back gracefully if the database is unavailable.
+   */
+  async fetchSimilarWords(englishWord: string): Promise<Array<{ word: string; irish: string }>> {
+    try {
+      const wn = getWordNetGaeilge();
+      const similar = await wn.findSimilarWords(englishWord);
+      return similar;
+    } catch (err) {
+      console.warn("Error fetching similar words:", err);
+      return [];
     }
   }
 
